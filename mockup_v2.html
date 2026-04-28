@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UX 排版重构设计方案 (4种完全不同的布局)</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --bg-page: #f3f4f6;
+        }
+        body {
+            margin: 0;
+            padding: 40px;
+            background-color: var(--bg-page);
+            font-family: var(--font-family);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 50px;
+            color: #1f2937;
+        }
+        .wrapper { display: flex; flex-direction: column; align-items: center; }
+        .style-title { text-align: center; color: #4b5563; margin-bottom: 10px; font-weight: 600; font-size: 20px;}
+        .style-desc { text-align: center; color: #6b7280; margin-bottom: 25px; font-size: 14px; max-width: 500px;}
+        
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+
+        /* =========================================
+           方案 1: Spotlight / Raycast 沉浸式搜索框风 (极简专注)
+           放弃繁杂的开关，把“核心功能”放大，配置隐藏
+           ========================================= */
+        .layout-1 {
+            width: 580px; height: 500px;
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,0.4);
+        }
+        .l1-top {
+            padding: 24px 30px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px;
+        }
+        .l1-icon-box {
+            width: 48px; height: 48px; background: #4f46e5; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; color: white;
+        }
+        .l1-status-text { flex: 1; font-size: 20px; font-weight: 500; color: #111827; }
+        .l1-status-sub { font-size: 13px; color: #10b981; display: flex; align-items: center; gap: 6px; margin-top: 4px;}
+        .l1-status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
+        .l1-actions { display: flex; gap: 12px; }
+        .l1-btn { 
+            width: 36px; height: 36px; border-radius: 8px; background: #f3f4f6;
+            display: flex; align-items: center; justify-content: center; color: #4b5563; cursor: pointer; transition: 0.2s;
+        }
+        .l1-btn:hover { background: #e5e7eb; color: #111827; }
+        .l1-btn.primary { background: #e0e7ff; color: #4f46e5; width: auto; padding: 0 16px; font-size: 14px; font-weight: 500; gap: 6px;}
+        .l1-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .l1-item {
+            padding: 16px 20px; border-bottom: 1px solid #f3f4f6; transition: 0.2s; border-radius: 8px;
+        }
+        .l1-item:hover { background: #f9fafb; }
+        .l1-item-orig { font-size: 15px; color: #4b5563; margin-bottom: 8px; }
+        .l1-item-trans { font-size: 16px; font-weight: 500; color: #111827; display: flex; justify-content: space-between;}
+        .l1-footer {
+            padding: 12px 30px; background: #f9fafb; font-size: 12px; color: #9ca3af; display: flex; justify-content: space-between;
+        }
+
+        /* =========================================
+           方案 2: Dashboard / 侧边栏布局 (专业效率)
+           将配置和内容区隔离开，更像一个成熟的桌面软件
+           ========================================= */
+        .layout-2 {
+            width: 600px; height: 480px; background: #ffffff; border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); display: flex; overflow: hidden; border: 1px solid #e5e7eb;
+        }
+        .l2-sidebar {
+            width: 200px; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 24px 16px;
+            display: flex; flex-direction: column;
+        }
+        .l2-brand { font-size: 18px; font-weight: bold; color: #0f172a; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 0 10px;}
+        .l2-brand i { color: #3b82f6; }
+        .l2-nav { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .l2-nav-item {
+            padding: 10px 12px; border-radius: 8px; color: #64748b; font-size: 14px; font-weight: 500;
+            display: flex; align-items: center; gap: 12px; cursor: pointer; transition: 0.2s;
+        }
+        .l2-nav-item.active { background: #eff6ff; color: #2563eb; }
+        .l2-nav-item:hover:not(.active) { background: #f1f5f9; color: #0f172a; }
+        .l2-settings { margin-top: auto; padding: 16px 10px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .l2-set-title { font-size: 12px; color: #94a3b8; font-weight: 600; margin-bottom: 12px; text-transform: uppercase;}
+        .l2-toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; color: #475569;}
+        /* 简单模拟的开关 */
+        .toggle-switch { width: 32px; height: 18px; background: #3b82f6; border-radius: 10px; position: relative; cursor: pointer; }
+        .toggle-switch::after { content: ''; position: absolute; width: 14px; height: 14px; background: white; border-radius: 50%; top: 2px; right: 2px; }
+        
+        .l2-main { flex: 1; display: flex; flex-direction: column; background: #ffffff;}
+        .l2-header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;}
+        .l2-title { font-size: 18px; font-weight: 600; color: #0f172a; }
+        .l2-content { flex: 1; padding: 24px; overflow-y: auto; background: #fafafa;}
+        .l2-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+
+        /* =========================================
+           方案 3: Widget / 移动端卡片风 (极度紧凑)
+           像手机APP或小组件，节省桌面空间，只有一列
+           ========================================= */
+        .layout-3 {
+            width: 360px; height: 600px; background: #ffffff; border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden;
+            border: 8px solid #f3f4f6;
+        }
+        .l3-header {
+            padding: 30px 24px 20px; text-align: center; background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white; border-radius: 0 0 24px 24px;
+        }
+        .l3-title { font-size: 24px; font-weight: 700; margin-bottom: 5px; }
+        .l3-sub { font-size: 13px; opacity: 0.8; margin-bottom: 20px; }
+        .l3-big-toggle {
+            background: rgba(255,255,255,0.2); padding: 12px; border-radius: 16px;
+            display: flex; justify-content: center; align-items: center; gap: 10px; cursor: pointer; font-weight: bold;
+        }
+        .l3-tabs {
+            display: flex; padding: 16px 24px 0; gap: 20px; border-bottom: 1px solid #f3f4f6;
+        }
+        .l3-tab { font-size: 15px; color: #9ca3af; padding-bottom: 12px; cursor: pointer; font-weight: 500;}
+        .l3-tab.active { color: #111827; border-bottom: 2px solid #10b981; }
+        .l3-content { flex: 1; padding: 20px 24px; overflow-y: auto; background: #ffffff;}
+        .l3-record { background: #f9fafb; padding: 16px; border-radius: 12px; margin-bottom: 16px;}
+        .l3-orig { font-size: 13px; color: #6b7280; margin-bottom: 6px; }
+        .l3-trans { font-size: 15px; color: #111827; font-weight: 500; }
+        .l3-fab {
+            position: absolute; bottom: 24px; right: 24px; width: 56px; height: 56px;
+            background: #10b981; color: white; border-radius: 28px; box-shadow: 0 4px 14px rgba(16,185,129,0.4);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
+        /* =========================================
+           方案 4: 极客终端卡片 (Timeline 时间轴排版)
+           把翻译历史作为时间线，弱化设置项
+           ========================================= */
+        .layout-4 {
+            width: 550px; height: 550px; background: #18181b; border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column;
+            color: #d4d4d8; font-family: ui-sans-serif, system-ui; border: 1px solid #27272a;
+        }
+        .l4-top { padding: 16px 24px; border-bottom: 1px solid #27272a; display: flex; align-items: center; justify-content: space-between; background: #09090b;}
+        .l4-brand { font-size: 16px; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 8px;}
+        .l4-pill { background: #27272a; padding: 4px 12px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;}
+        .l4-pill-dot { width: 6px; height: 6px; background: #a855f7; border-radius: 50%; }
+        .l4-timeline { flex: 1; padding: 24px; overflow-y: auto; position: relative;}
+        /* 时间轴线 */
+        .l4-timeline::before { content: ''; position: absolute; left: 34px; top: 24px; bottom: 24px; width: 2px; background: #27272a; }
+        
+        .l4-event { position: relative; padding-left: 40px; margin-bottom: 30px; }
+        .l4-node { position: absolute; left: 6px; top: 4px; width: 10px; height: 10px; background: #18181b; border: 2px solid #a855f7; border-radius: 50%;}
+        .l4-time { font-size: 12px; color: #71717a; margin-bottom: 6px; }
+        .l4-box { background: #27272a; padding: 16px; border-radius: 8px; border: 1px solid #3f3f46;}
+        .l4-source { color: #a1a1aa; font-size: 14px; margin-bottom: 8px; font-style: italic;}
+        .l4-result { color: #f4f4f5; font-size: 16px; font-weight: 500;}
+        .l4-bottom { padding: 16px 24px; border-top: 1px solid #27272a; display: flex; gap: 12px; background: #09090b; align-items: center;}
+        .l4-select { background: #18181b; border: 1px solid #3f3f46; color: #d4d4d8; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none;}
+        .l4-btn { background: #a855f7; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;}
+    </style>
+</head>
+<body>
+
+    <!-- 方案 1: Spotlight 风 -->
+    <div class="wrapper">
+        <h2 class="style-title">方案 1: 沉浸式搜索框风 (Spotlight UX)</h2>
+        <p class="style-desc">抛弃复杂的勾选框和单选按钮。打开软件就是一个大大的状态指示和历史记录。设置项全部隐藏到齿轮图标里。适合追求极简和无干扰体验的用户。</p>
+        
+        <div class="layout-1">
+            <div class="l1-top">
+                <div class="l1-icon-box">
+                    <i data-lucide="zap"></i>
+                </div>
+                <div style="flex:1;">
+                    <div class="l1-status-text">随时待命中</div>
+                    <div class="l1-status-sub">
+                        <div class="l1-status-dot"></div>
+                        划词后按 Ctrl + L 即可翻译
+                    </div>
+                </div>
+                <div class="l1-actions">
+                    <div class="l1-btn primary">
+                        <i data-lucide="book-open" style="width: 16px; height: 16px;"></i> 生词本
+                    </div>
+                    <div class="l1-btn">
+                        <i data-lucide="settings" style="width: 18px; height: 18px;"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="l1-list">
+                <div class="l1-item">
+                    <div class="l1-item-orig">Experience completely new layouts</div>
+                    <div class="l1-item-trans">
+                        体验完全不同的布局
+                        <i data-lucide="copy" style="width: 16px; height: 16px; color:#9ca3af; cursor:pointer;"></i>
+                    </div>
+                </div>
+                <div class="l1-item">
+                    <div class="l1-item-orig">User Experience is the key</div>
+                    <div class="l1-item-trans">
+                        用户体验是关键
+                        <i data-lucide="copy" style="width: 16px; height: 16px; color:#9ca3af; cursor:pointer;"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="l1-footer">
+                <span>翻译引擎: MyMemory</span>
+                <span style="cursor: pointer; display: flex; align-items: center; gap:4px;"><i data-lucide="trash-2" style="width: 14px;"></i> 清空记录</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 2: Dashboard 侧边栏风 -->
+    <div class="wrapper">
+        <h2 class="style-title">方案 2: 侧边栏控制台风 (Dashboard UX)</h2>
+        <p class="style-desc">专业软件最爱的布局。左边是导航和快速开关，右侧是开阔的内容区。这种布局扩展性最强，未来增加“统计”、“账户”等功能也不会乱。</p>
+        
+        <div class="layout-2">
+            <!-- Sidebar -->
+            <div class="l2-sidebar">
+                <div class="l2-brand">
+                    <i data-lucide="languages"></i> LingoLens
+                </div>
+                <div class="l2-nav">
+                    <div class="l2-nav-item active"><i data-lucide="history" style="width: 18px;"></i> 翻译历史</div>
+                    <div class="l2-nav-item"><i data-lucide="book-marked" style="width: 18px;"></i> 生词复习</div>
+                    <div class="l2-nav-item"><i data-lucide="sliders-horizontal" style="width: 18px;"></i> 偏好设置</div>
+                </div>
+                <div class="l2-settings">
+                    <div class="l2-set-title">快速控制</div>
+                    <div class="l2-toggle-row">
+                        <span>划词翻译</span>
+                        <div class="toggle-switch"></div>
+                    </div>
+                    <div class="l2-toggle-row">
+                        <span>鼠标悬浮</span>
+                        <div class="toggle-switch"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="l2-main">
+                <div class="l2-header">
+                    <div class="l2-title">翻译历史</div>
+                    <div style="color: #64748b; cursor:pointer;"><i data-lucide="trash"></i></div>
+                </div>
+                <div class="l2-content">
+                    <div class="l2-card">
+                        <div style="font-size: 13px; color:#64748b; margin-bottom: 8px;">11:42 AM · 来源网页</div>
+                        <div style="font-size: 15px; color:#0f172a; font-weight:500; margin-bottom: 8px;">Focus on User Experience.</div>
+                        <div style="font-size: 15px; color:#2563eb; padding-top: 8px; border-top: 1px dashed #e2e8f0;">专注于用户体验。</div>
+                    </div>
+                    <div class="l2-card">
+                        <div style="font-size: 13px; color:#64748b; margin-bottom: 8px;">11:40 AM · 来源文档</div>
+                        <div style="font-size: 15px; color:#0f172a; font-weight:500; margin-bottom: 8px;">Redesign the layout.</div>
+                        <div style="font-size: 15px; color:#2563eb; padding-top: 8px; border-top: 1px dashed #e2e8f0;">重新设计布局。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 3: Widget 卡片风 -->
+    <div class="wrapper">
+        <h2 class="style-title">方案 3: 桌面小组件风 (Widget UX)</h2>
+        <p class="style-desc">极其紧凑的纵向排版，像手机 App 一样小巧。顶部巨大显眼的开关一目了然，用标签页分离“记录”和“设置”，让单个画面信息量极低，毫无压迫感。</p>
+        
+        <div class="layout-3" style="position:relative;">
+            <div class="l3-header">
+                <div class="l3-title">ON</div>
+                <div class="l3-sub">划词翻译已激活</div>
+                <div class="l3-big-toggle">
+                    <i data-lucide="power" style="width:18px;"></i> 点击暂停
+                </div>
+            </div>
+            
+            <div class="l3-tabs">
+                <div class="l3-tab active">最近记录</div>
+                <div class="l3-tab">引擎配置</div>
+            </div>
+            
+            <div class="l3-content">
+                <div class="l3-record">
+                    <div class="l3-orig">Discard unnecessary elements</div>
+                    <div class="l3-trans">丢弃不必要的元素</div>
+                </div>
+                <div class="l3-record">
+                    <div class="l3-orig">Different typography</div>
+                    <div class="l3-trans">不同的排版方式</div>
+                </div>
+            </div>
+            
+            <div class="l3-fab">
+                <i data-lucide="book"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 4: Timeline 时间轴风 -->
+    <div class="wrapper">
+        <h2 class="style-title">方案 4: Timeline 时间轴风 (Chat/Log UX)</h2>
+        <p class="style-desc">把翻译彻底变成了“行为流水账”，左侧的线串联起你今天的阅读轨迹。底部集成极简的下拉框切换引擎。视觉酷炫且直观。</p>
+        
+        <div class="layout-4">
+            <div class="l4-top">
+                <div class="l4-brand">
+                    <i data-lucide="terminal" style="color:#a855f7;"></i> SwiftTrans
+                </div>
+                <div class="l4-pill">
+                    <div class="l4-pill-dot"></div>
+                    Ctrl + L 监听中
+                </div>
+            </div>
+            
+            <div class="l4-timeline">
+                <div class="l4-event">
+                    <div class="l4-node"></div>
+                    <div class="l4-time">Just now</div>
+                    <div class="l4-box">
+                        <div class="l4-source">User experience is the priority</div>
+                        <div class="l4-result">用户体验优先</div>
+                    </div>
+                </div>
+                <div class="l4-event">
+                    <div class="l4-node"></div>
+                    <div class="l4-time">2 mins ago</div>
+                    <div class="l4-box">
+                        <div class="l4-source">Try a completely different style</div>
+                        <div class="l4-result">尝试一种完全不同的风格</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="l4-bottom">
+                <span style="font-size: 13px; color:#a1a1aa;">引擎:</span>
+                <select class="l4-select">
+                    <option>MyMemory (Free)</option>
+                    <option>Google Translate</option>
+                </select>
+                <div style="flex:1;"></div>
+                <button class="l4-btn"><i data-lucide="book-open" style="width:14px; margin-right:4px;"></i> 生词本</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Lucide Icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>

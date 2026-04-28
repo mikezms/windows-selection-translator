@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingoLens 悬浮窗设计方案</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        body {
+            font-family: var(--font-family);
+            background-color: #e2e8f0;
+            margin: 0;
+            padding: 40px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            justify-items: center;
+        }
+
+        .container-title {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 20px;
+        }
+
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .wrapper-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        /* 基础结构复用 */
+        .float-window {
+            width: 400px;
+            position: relative;
+            box-sizing: border-box;
+            cursor: default;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: 0.2s;
+        }
+        .close-btn:hover {
+            opacity: 1;
+        }
+
+        /* =========================================
+           方案 1: Glassmorphism Dark (毛玻璃深色风)
+           ========================================= */
+        .v1 {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            color: #f8fafc;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+        .v1 .word { font-size: 24px; font-weight: 700; color: #ffffff; margin-bottom: 8px;}
+        .v1 .meaning { font-size: 15px; color: #38bdf8; font-weight: 500; margin-bottom: 16px;}
+        .v1 .divider { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 16px 0; }
+        .v1 .example-en { font-size: 13px; color: #cbd5e1; margin-bottom: 6px; line-height: 1.5;}
+        .v1 .example-zh { font-size: 12px; color: #94a3b8; line-height: 1.5;}
+        .v1 .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;}
+        .v1 .btn {
+            padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; gap: 6px; transition: 0.2s;
+        }
+        .v1 .btn-pronounce { background: rgba(56, 189, 248, 0.1); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2); }
+        .v1 .btn-pronounce:hover { background: rgba(56, 189, 248, 0.2); }
+        .v1 .btn-save { background: #3b82f6; color: white; border: 1px solid #3b82f6; }
+        .v1 .btn-save:hover { background: #2563eb; }
+
+        /* =========================================
+           方案 2: Minimalist Light (极简亮色风)
+           ========================================= */
+        .v2 {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 24px;
+            color: #0f172a;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+        }
+        .v2 .close-btn { color: #64748b; }
+        .v2 .word { font-size: 28px; font-weight: 800; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.5px;}
+        .v2 .meaning { font-size: 16px; color: #2563eb; font-weight: 600; margin-bottom: 20px;}
+        .v2 .ex-box { background: #f8fafc; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;}
+        .v2 .example-en { font-size: 14px; color: #334155; margin-bottom: 4px; font-weight: 500;}
+        .v2 .example-zh { font-size: 13px; color: #64748b;}
+        .v2 .actions { display: flex; gap: 12px; }
+        .v2 .btn {
+            flex: 1; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; border: none;
+        }
+        .v2 .btn-pronounce { background: #f1f5f9; color: #475569; }
+        .v2 .btn-pronounce:hover { background: #e2e8f0; }
+        .v2 .btn-save { background: #0f172a; color: white; }
+        .v2 .btn-save:hover { background: #1e293b; }
+
+        /* =========================================
+           方案 3: Card-based Split (分层卡片风)
+           ========================================= */
+        .v3 {
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: flex; flex-direction: column;
+        }
+        .v3 .top-section { background: #eff6ff; padding: 24px; position: relative; }
+        .v3 .close-btn { color: #3b82f6; }
+        .v3 .word { font-size: 22px; font-weight: 700; color: #1e3a8a; margin-bottom: 6px;}
+        .v3 .meaning { font-size: 15px; color: #2563eb; font-weight: 500;}
+        
+        .v3 .bottom-section { padding: 20px 24px; background: #ffffff; }
+        .v3 .example-en { font-size: 14px; color: #334155; margin-bottom: 8px; line-height: 1.5; border-left: 3px solid #cbd5e1; padding-left: 10px;}
+        .v3 .example-zh { font-size: 13px; color: #64748b; padding-left: 13px;}
+        
+        .v3 .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px dashed #e2e8f0;}
+        .v3 .btn {
+            background: transparent; border: none; font-size: 14px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .v3 .btn-pronounce { color: #64748b; }
+        .v3 .btn-pronounce:hover { color: #0f172a; }
+        .v3 .btn-save { color: #3b82f6; }
+        .v3 .btn-save:hover { color: #2563eb; }
+
+        /* =========================================
+           方案 4: Sidebar Action (侧边栏操作风)
+           ========================================= */
+        .v4 {
+            background: #1e293b;
+            border-radius: 10px;
+            display: flex;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        .v4 .content-section { padding: 20px; flex: 1; }
+        .v4 .word { font-size: 20px; font-weight: 700; color: #f8fafc; margin-bottom: 4px;}
+        .v4 .meaning { font-size: 14px; color: #60a5fa; font-weight: 500; margin-bottom: 16px;}
+        .v4 .example-en { font-size: 13px; color: #cbd5e1; margin-bottom: 6px; line-height: 1.4;}
+        .v4 .example-zh { font-size: 12px; color: #94a3b8; line-height: 1.4;}
+        
+        .v4 .action-section { 
+            width: 60px; background: #0f172a; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+            border-left: 1px solid rgba(255,255,255,0.05);
+            position: relative;
+        }
+        .v4 .close-btn { top: 8px; right: 8px; color: #94a3b8;}
+        .v4 .btn-icon {
+            width: 36px; height: 36px; border-radius: 50%; background: #1e293b; color: #94a3b8;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .v4 .btn-icon:hover { background: #3b82f6; color: white; border-color: #3b82f6;}
+
+    </style>
+</head>
+<body>
+
+    <div class="container-title">悬浮翻译窗 - 4种设计方案预演</div>
+
+    <!-- 方案 1 -->
+    <div class="wrapper">
+        <div class="wrapper-title">方案 1: Glassmorphism Dark (现代毛玻璃，强科技感)</div>
+        <div class="float-window v1">
+            <i data-lucide="x" class="close-btn" style="width: 18px;"></i>
+            <div class="word">curl</div>
+            <div class="meaning">v. 蜷缩；卷曲</div>
+            <div class="divider"></div>
+            <div class="example-en">She loves to curl up with a good book on a rainy afternoon.</div>
+            <div class="example-zh">她喜欢在下雨的午后蜷缩着身子读一本好书。</div>
+            <div class="actions">
+                <button class="btn btn-pronounce"><i data-lucide="volume-2" style="width: 14px;"></i> 发音</button>
+                <button class="btn btn-save"><i data-lucide="plus" style="width: 14px;"></i> 收入生词本</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 2 -->
+    <div class="wrapper">
+        <div class="wrapper-title">方案 2: Minimalist Light (极简亮色，清晰阅读)</div>
+        <div class="float-window v2">
+            <i data-lucide="x" class="close-btn" style="width: 18px;"></i>
+            <div class="word">curl</div>
+            <div class="meaning">v. 蜷缩；卷曲</div>
+            <div class="ex-box">
+                <div class="example-en">She loves to curl up with a good book on a rainy afternoon.</div>
+                <div class="example-zh">她喜欢在下雨的午后蜷缩着身子读一本好书。</div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-pronounce"><i data-lucide="volume-2" style="width: 16px;"></i></button>
+                <button class="btn btn-save"><i data-lucide="bookmark-plus" style="width: 16px;"></i> 收录</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 3 -->
+    <div class="wrapper">
+        <div class="wrapper-title">方案 3: Card-based Split (分层卡片，结构最分明)</div>
+        <div class="float-window v3">
+            <div class="top-section">
+                <i data-lucide="x" class="close-btn" style="width: 18px;"></i>
+                <div class="word">curl</div>
+                <div class="meaning">v. 蜷缩；卷曲</div>
+            </div>
+            <div class="bottom-section">
+                <div class="example-en">She loves to curl up with a good book on a rainy afternoon.</div>
+                <div class="example-zh">她喜欢在下雨的午后蜷缩着身子读一本好书。</div>
+                <div class="actions">
+                    <button class="btn btn-pronounce"><i data-lucide="volume-2" style="width: 16px;"></i> 朗读</button>
+                    <button class="btn btn-save"><i data-lucide="plus" style="width: 16px;"></i> 收入生词本</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 4 -->
+    <div class="wrapper">
+        <div class="wrapper-title">方案 4: Sidebar Action (侧边栏操作区，最省垂直空间)</div>
+        <div class="float-window v4">
+            <div class="content-section">
+                <div class="word">curl</div>
+                <div class="meaning">v. 蜷缩；卷曲</div>
+                <div class="example-en">She loves to curl up with a good book on a rainy afternoon.</div>
+                <div class="example-zh">她喜欢在下雨的午后蜷缩着身子读一本好书。</div>
+            </div>
+            <div class="action-section">
+                <i data-lucide="x" class="close-btn" style="width: 14px;"></i>
+                <div class="btn-icon" title="发音"><i data-lucide="volume-2" style="width: 16px;"></i></div>
+                <div class="btn-icon" title="收录"><i data-lucide="bookmark-plus" style="width: 16px;"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

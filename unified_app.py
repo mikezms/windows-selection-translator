@@ -67,7 +67,7 @@ class UnifiedApp:
         with self._enabled_lock:
             self._translate_enabled = bool(self.enable_var.get())
         if self._translate_enabled:
-            self.status_var.set("已开启 — 划词后按 Alt + T 即可翻译")
+            self.status_var.set("已开启 — 划词后按 Ctrl + L 即可翻译")
         else:
             self.status_var.set("已暂停 — 不会响应快捷键")
 
@@ -78,26 +78,17 @@ class UnifiedApp:
         self.log_text.insert("end", f"     译文：{result}\n\n", "trans")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
-        
-        # 存入文件
-        import history_store
-        hist_items = history_store.load()
-        history_store.add(hist_items, ts, original, result)
-        history_store.save(hist_items)
 
     def _clear_log(self):
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", "end")
         self.log_text.configure(state="disabled")
-        
-        import history_store
-        history_store.save([])
 
     def _do_translate_job(self):
         if not self._is_translate_enabled(): return
         text = hk.copy_selected_text()
         if not text:
-            self.root.after(0, lambda: self._show_error("提示", "未检测到选中文本，请先划词再按 Alt + T"))
+            self.root.after(0, lambda: self._show_error("提示", "未检测到选中文本，请先划词再按 Ctrl + L"))
             return
         if len(text) > MAX_TEXT_LENGTH: text = text[:MAX_TEXT_LENGTH] + "..."
         try:
@@ -168,7 +159,7 @@ class UnifiedApp:
         chk_kw = dict(bg=UI_CARD, fg=UI_TEXT_SOFT, activebackground=UI_CARD, activeforeground=UI_TEXT,
                       selectcolor=UI_CHIP, font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
         
-        tk.Checkbutton(settings, text="划词翻译 (Alt+T)", variable=self.enable_var, command=self._on_enable_toggle, **chk_kw).pack(anchor="w", pady=2)
+        tk.Checkbutton(settings, text="划词翻译 (Ctrl+L)", variable=self.enable_var, command=self._on_enable_toggle, **chk_kw).pack(anchor="w", pady=2)
         tk.Checkbutton(settings, text="鼠标悬浮提示", variable=self.floating_var, **chk_kw).pack(anchor="w", pady=2)
 
         tk.Frame(settings, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=10)
@@ -178,7 +169,6 @@ class UnifiedApp:
                      font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
         tk.Radiobutton(settings, text="MyMemory (免代理)", variable=self.translate_source_var, value="mymemory", **rb_kw).pack(anchor="w")
         tk.Radiobutton(settings, text="Google Translate", variable=self.translate_source_var, value="google", **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="DeepSeek (AI 前沿语境)", variable=self.translate_source_var, value="deepseek", **rb_kw).pack(anchor="w")
 
     def _switch_tab(self, tab_id):
         # 更新按钮样式
@@ -231,19 +221,6 @@ class UnifiedApp:
         tk.Label(status, text="●", bg=UI_STATUS_BG, fg=UI_ACCENT, font=tkfont.Font(family=FONT_FAMILY, size=8)).pack(side="left", padx=(0, 6))
         tk.Label(status, textvariable=self.status_var, bg=UI_STATUS_BG, fg=UI_TEXT_SOFT, font=tkfont.Font(family=FONT_FAMILY, size=9)).pack(side="left")
 
-        # 加载历史记录
-        import history_store
-        hist_items = history_store.load()
-        if hist_items:
-            self.log_text.configure(state="normal")
-            for item in hist_items:
-                ts = item.get("timestamp", "")
-                orig = item.get("original", "")
-                trans = item.get("translated", "")
-                self.log_text.insert("end", f"[{ts}] 原文：{orig}\n", "orig")
-                self.log_text.insert("end", f"     译文：{trans}\n\n", "trans")
-            self.log_text.see("end")
-            self.log_text.configure(state="disabled")
 
     # ---- 生词本 Tab (Master-Detail UX) ----
     def _build_vocab_tab(self):
@@ -291,19 +268,7 @@ class UnifiedApp:
         self.v_meaning_var = tk.StringVar()
         self.v_stats_var = tk.StringVar()
 
-        # 将详情区分割为顶部(可弹性)和底部(固定停靠)
-        self.detail_bottom_fr = tk.Frame(self.detail_fr, bg=UI_CARD)
-        self.detail_bottom_fr.pack(side="bottom", fill="x")
-        
-        self.detail_top_fr = tk.Frame(self.detail_fr, bg=UI_CARD)
-        self.detail_top_fr.pack(side="top", fill="both", expand=True)
-        
-        # 内部布局 - 顶部容器
-        self.v_word_var = tk.StringVar()
-        self.v_meaning_var = tk.StringVar()
-        self.v_stats_var = tk.StringVar()
-
-        top_row = tk.Frame(self.detail_top_fr, bg=UI_CARD)
+        top_row = tk.Frame(self.detail_fr, bg=UI_CARD)
         top_row.pack(fill="x")
         word_lbl = tk.Label(top_row, textvariable=self.v_word_var, bg=UI_CARD, fg=UI_TEXT, font=tkfont.Font(family=FONT_FAMILY, size=24, weight="bold"))
         word_lbl.pack(side="left")
@@ -315,18 +280,17 @@ class UnifiedApp:
         self.btn_gen.pack(side="right")
         hover_bind(self.btn_gen, UI_CHIP, UI_ACCENT, fg=UI_ACCENT, hover_fg="#ffffff")
 
-        tk.Label(self.detail_top_fr, textvariable=self.v_stats_var, bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9)).pack(anchor="w", pady=(2, 16))
+        tk.Label(self.detail_fr, textvariable=self.v_stats_var, bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9)).pack(anchor="w", pady=(2, 16))
         
-        tk.Label(self.detail_top_fr, text="翻译释义", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
-        self.meaning_lbl = tk.Label(self.detail_top_fr, textvariable=self.v_meaning_var, bg=UI_CARD, fg=UI_MEANING, font=tkfont.Font(family=FONT_FAMILY, size=14), anchor="w", justify="left")
-        self.meaning_lbl.pack(fill="x", anchor="w", pady=(4, 20))
+        tk.Label(self.detail_fr, text="翻译释义", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
+        tk.Label(self.detail_fr, textvariable=self.v_meaning_var, bg=UI_CARD, fg=UI_MEANING, font=tkfont.Font(family=FONT_FAMILY, size=14), wraplength=400, justify="left").pack(anchor="w", pady=(4, 20))
         
-        tk.Frame(self.detail_top_fr, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=10)
+        tk.Frame(self.detail_fr, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=10)
         
-        tk.Label(self.detail_top_fr, text="情景例句", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 6))
+        tk.Label(self.detail_fr, text="情景例句", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 6))
         
         ex_bg = UI_BG_ALT
-        self.ex_wrap = tk.Frame(self.detail_top_fr, bg=ex_bg, highlightbackground=UI_BORDER_SOFT, highlightthickness=1, padx=16, pady=16)
+        self.ex_wrap = tk.Frame(self.detail_fr, bg=ex_bg, highlightbackground=UI_BORDER_SOFT, highlightthickness=1, padx=16, pady=16)
         self.ex_wrap.pack(fill="x")
         
         self.v_ex_en = tk.StringVar()
@@ -334,18 +298,16 @@ class UnifiedApp:
         
         ex_top = tk.Frame(self.ex_wrap, bg=ex_bg)
         ex_top.pack(fill="x", pady=(0, 8))
-        self.ex_en_lbl = tk.Label(ex_top, textvariable=self.v_ex_en, bg=ex_bg, fg=UI_TEXT, font=tkfont.Font(family=FONT_FAMILY, size=12), anchor="w", justify="left")
-        self.ex_en_lbl.pack(side="left", fill="x", expand=True)
+        tk.Label(ex_top, textvariable=self.v_ex_en, bg=ex_bg, fg=UI_TEXT, font=tkfont.Font(family=FONT_FAMILY, size=12), wraplength=400, justify="left").pack(side="left", fill="x", expand=True)
         tk.Button(ex_top, text="♪", command=self._speak_current_example, bg=ex_bg, fg=UI_INFO, relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=12), cursor="hand2").pack(side="right", anchor="n")
         
-        self.ex_zh_lbl = tk.Label(self.ex_wrap, textvariable=self.v_ex_zh, bg=ex_bg, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=10), anchor="w", justify="left")
-        self.ex_zh_lbl.pack(fill="x", anchor="w")
+        tk.Label(self.ex_wrap, textvariable=self.v_ex_zh, bg=ex_bg, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=10), wraplength=400, justify="left").pack(anchor="w")
 
-        # 内部布局 - 底部评分容器
-        tk.Frame(self.detail_bottom_fr, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=(10, 10))
-        tk.Label(self.detail_bottom_fr, text="掌握程度测评", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 10))
+        # 评分按钮
+        tk.Frame(self.detail_fr, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=20)
+        tk.Label(self.detail_fr, text="掌握程度测评", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 10))
         
-        grade_fr = tk.Frame(self.detail_bottom_fr, bg=UI_CARD)
+        grade_fr = tk.Frame(self.detail_fr, bg=UI_CARD)
         grade_fr.pack(fill="x")
         
         def _make_btn(parent, text, color, hover_color, cmd):
@@ -359,23 +321,6 @@ class UnifiedApp:
         b2.pack(side="left", fill="x", expand=True, padx=(0, 8))
         b3 = _make_btn(grade_fr, "✕ 不认识", UI_DANGER, UI_DANGER_HOVER, lambda: self._apply_grade("unknown"))
         b3.pack(side="left", fill="x", expand=True)
-
-        # 动态调整换行长度
-        self.detail_fr.bind("<Configure>", self._on_detail_resize)
-
-    def _on_detail_resize(self, event):
-        w = event.width
-        # safe wrap limits based on the width of detail_fr
-        meaning_wrap = max(100, w - 48)
-        ex_en_wrap = max(100, w - 80) # padding for the button
-        ex_zh_wrap = max(100, w - 48)
-        
-        if hasattr(self, 'meaning_lbl'):
-            self.meaning_lbl.configure(wraplength=meaning_wrap)
-        if hasattr(self, 'ex_en_lbl'):
-            self.ex_en_lbl.configure(wraplength=ex_en_wrap)
-        if hasattr(self, 'ex_zh_lbl'):
-            self.ex_zh_lbl.configure(wraplength=ex_zh_wrap)
 
     # ---- 生词本业务逻辑 ----
     def _load_vocab_list(self):

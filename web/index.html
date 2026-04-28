@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingoLens</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --bg-page: #f3f4f6;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            background-color: #ffffff;
+            font-family: var(--font-family);
+            color: #1f2937;
+            height: 100vh; display: flex; overflow: hidden;
+        }
+        /* Dashboard Layout */
+        .sidebar {
+            width: 220px; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 24px 16px;
+            display: flex; flex-direction: column;
+        }
+        .brand { font-size: 18px; font-weight: bold; color: #0f172a; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 0 10px;}
+        .brand i { color: #3b82f6; }
+        .nav { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .nav-item {
+            padding: 10px 12px; border-radius: 8px; color: #64748b; font-size: 14px; font-weight: 500;
+            display: flex; align-items: center; gap: 12px; cursor: pointer; transition: 0.2s;
+        }
+        .nav-item.active { background: #eff6ff; color: #2563eb; }
+        .nav-item:hover:not(.active) { background: #f1f5f9; color: #0f172a; }
+        .settings { margin-top: auto; padding: 16px 10px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .set-title { font-size: 12px; color: #94a3b8; font-weight: 600; margin-bottom: 12px; text-transform: uppercase;}
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; color: #475569;}
+        
+        .toggle-switch { width: 36px; height: 20px; background: #cbd5e1; border-radius: 10px; position: relative; cursor: pointer; transition: 0.3s; }
+        .toggle-switch.on { background: #3b82f6; }
+        .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; }
+        .toggle-switch.on::after { left: 18px; }
+        
+        .main { flex: 1; display: flex; flex-direction: column; background: #ffffff;}
+        .header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;}
+        .title { font-size: 18px; font-weight: 600; color: #0f172a; }
+        .content { flex: 1; padding: 24px; overflow-y: auto; background: #fafafa;}
+        .card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);}
+        .card-time { font-size: 13px; color:#64748b; margin-bottom: 8px;}
+        .card-orig { font-size: 15px; color:#0f172a; font-weight:500; margin-bottom: 8px;}
+        .card-trans { font-size: 15px; color:#2563eb; padding-top: 8px; border-top: 1px dashed #e2e8f0;}
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .btn-clear { color: #94a3b8; cursor:pointer; transition: 0.2s;}
+        .btn-clear:hover { color: #ef4444; }
+        
+        select.source-sel { width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px; margin-top: 4px; outline: none; background: #f8fafc;}
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="brand">
+            <i data-lucide="languages"></i> LingoLens
+        </div>
+        <div class="nav">
+            <div class="nav-item active"><i data-lucide="history" style="width: 18px;"></i> 翻译历史</div>
+            <div class="nav-item" onclick="openVocab()"><i data-lucide="book-marked" style="width: 18px;"></i> 生词复习</div>
+        </div>
+        <div class="settings">
+            <div class="set-title">快速控制</div>
+            <div class="toggle-row">
+                <span>划词翻译 (Ctrl+L)</span>
+                <div class="toggle-switch on" id="toggle-translate" onclick="toggleTranslate()"></div>
+            </div>
+            <div class="toggle-row">
+                <span>鼠标悬浮提示</span>
+                <div class="toggle-switch on" id="toggle-float" onclick="toggleFloat()"></div>
+            </div>
+            <div class="set-title" style="margin-top: 16px;">翻译源</div>
+            <select class="source-sel" id="source-select" onchange="changeSource()">
+                <option value="mymemory">MyMemory (免代理)</option>
+                <option value="google">Google Translate</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="main">
+        <div class="header">
+            <div class="title">最近翻译记录</div>
+            <div class="btn-clear" onclick="clearLogs()" title="清空记录"><i data-lucide="trash"></i></div>
+        </div>
+        <div class="content" id="log-container">
+            <!-- 记录将通过 JS 渲染在这里 -->
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        
+        let translateEnabled = true;
+        let floatEnabled = true;
+
+        function toggleTranslate() {
+            translateEnabled = !translateEnabled;
+            const el = document.getElementById('toggle-translate');
+            translateEnabled ? el.classList.add('on') : el.classList.remove('on');
+            if (window.pywebview) pywebview.api.set_translate_enabled(translateEnabled);
+        }
+
+        function toggleFloat() {
+            floatEnabled = !floatEnabled;
+            const el = document.getElementById('toggle-float');
+            floatEnabled ? el.classList.add('on') : el.classList.remove('on');
+            if (window.pywebview) pywebview.api.set_float_enabled(floatEnabled);
+        }
+
+        function changeSource() {
+            const src = document.getElementById('source-select').value;
+            if (window.pywebview) pywebview.api.set_translation_source(src);
+        }
+
+        function clearLogs() {
+            document.getElementById('log-container').innerHTML = '';
+            if (window.pywebview) pywebview.api.clear_logs();
+        }
+
+        function openVocab() {
+            if (window.pywebview) pywebview.api.open_vocab();
+        }
+
+        // 被 Python 调用的函数，用于追加日志
+        function appendLog(timeStr, original, translated) {
+            const container = document.getElementById('log-container');
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-time">${timeStr}</div>
+                <div class="card-orig">${original}</div>
+                <div class="card-trans">${translated}</div>
+            `;
+            container.prepend(card);
+        }
+
+        // 初始化从 Python 拉取状态
+        window.addEventListener('pywebviewready', async function() {
+            const state = await pywebview.api.get_state();
+            
+            translateEnabled = state.translate_enabled;
+            const el1 = document.getElementById('toggle-translate');
+            translateEnabled ? el1.classList.add('on') : el1.classList.remove('on');
+
+            floatEnabled = state.float_enabled;
+            const el2 = document.getElementById('toggle-float');
+            floatEnabled ? el2.classList.add('on') : el2.classList.remove('on');
+            
+            document.getElementById('source-select').value = state.source;
+            
+            const logs = await pywebview.api.get_logs();
+            const container = document.getElementById('log-container');
+            container.innerHTML = '';
+            logs.reverse().forEach(log => {
+                appendLog(log.time, log.original, log.translated);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,399 +1,143 @@
 [
   {
-    "word": "urban",
-    "meaning": "城市的",
-    "example": "Living in an urban environment offers access to cultural events and diverse dining options.",
-    "example_zh": "生活在城市环境中可以接触到文化活动并享受多样化的餐饮选择。",
+    "word": "operations",
+    "meaning": "操作",
+    "example": "The new software simplifies complex operations, making it easier for users to manage their data.",
+    "example_zh": "这款新软件简化了复杂的操作，让用户更容易管理自己的数据。",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "was prone to",
-    "meaning": "很容易",
-    "example": "He was prone to making careless mistakes when he was tired.",
-    "example_zh": "他疲惫时很容易犯粗心的错误。",
-    "score": 50.0,
-    "reviews": 0
+    "word": "Nous Research",
+    "meaning": "Nous Research",
+    "example": "Nous Research has published several groundbreaking papers on artificial intelligence that are widely cited in the academic community.",
+    "example_zh": "Nous Research 发表了几篇在人工智能领域具有开创性、并被学术界广泛引用的论文。",
+    "score": 55.0,
+    "reviews": 1
   },
   {
-    "word": "theft",
-    "meaning": "盗窃",
-    "example": "The store installed security cameras to prevent theft.",
-    "example_zh": "这家商店安装了监控摄像头来防止盗窃。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "profitable",
-    "meaning": "有利可图",
-    "example": "The new marketing strategy proved to be highly profitable for the company.",
-    "example_zh": "新的营销策略被证明对公司非常有利可图。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "pivotal",
-    "meaning": "关键的",
-    "example": "Her support was pivotal in securing the funding for the project.",
-    "example_zh": "她的支持对于确保该项目获得资金至关重要。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "proposed",
-    "meaning": "建议的",
-    "example": "The proposed changes to the policy will be discussed at the next meeting.",
-    "example_zh": "对政策的建议修改将在下次会议上讨论。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "calculations",
-    "meaning": "计算",
-    "example": "The engineer's precise calculations ensured the bridge's structural integrity.",
-    "example_zh": "工程师精确的计算确保了桥梁的结构完整性。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "Nevertheless",
-    "meaning": "尽管如此",
-    "example": "The weather was terrible; nevertheless, they decided to go ahead with the picnic.",
-    "example_zh": "天气很糟糕；尽管如此，他们还是决定继续进行野餐。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "glorious",
-    "meaning": "辉煌",
-    "example": "The sunset over the ocean was a truly glorious sight, painting the sky in shades of orange and purple.",
-    "example_zh": "海上的日落真是一幅辉煌的景象，将天空染成了橙色和紫色。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "decisive",
-    "meaning": "决定性",
-    "example": "Her decisive action in the crisis prevented a major disaster.",
-    "example_zh": "她在危机中采取的果断行动避免了一场重大灾难。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "filed for",
-    "meaning": "申请",
-    "example": "After years of struggling with debt, the company finally filed for bankruptcy last month.",
-    "example_zh": "在经历了多年的债务困境后，该公司终于在上个月申请了破产。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "patent",
-    "meaning": "专利",
-    "example": "The company filed a patent for its innovative solar panel technology to protect its intellectual property.",
-    "example_zh": "该公司为其创新的太阳能电池板技术申请了专利，以保护其知识产权。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "explanation",
-    "meaning": "解释",
-    "example": "Could you give me a brief explanation of how this software works?",
-    "example_zh": "你能给我简单解释一下这个软件是如何运作的吗？",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "get off the ground",
-    "meaning": "离开地面",
-    "example": "The new startup struggled to get off the ground due to a lack of initial funding.",
-    "example_zh": "这家新创公司因缺乏启动资金而难以起步。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "struggled to",
-    "meaning": "努力",
-    "example": "She struggled to keep her composure during the emotional farewell.",
-    "example_zh": "她在感人的告别仪式上努力保持镇定。",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "initiatives",
-    "meaning": "倡议",
+    "word": "Hermes Agent has bounded, curated memory that persists across sessions. This lets it remember your preferences, your pro...",
+    "meaning": "n. 有限精选记忆（指人工智能系统中经过筛选、跨会话持久化存储的有限记忆功能）",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "in general",
-    "meaning": "一般来说",
+    "word": "Frozen snapshot pattern",
+    "meaning": "n. 冻结快照模式；指在深度学习或Agent系统中，将模型在特定训练阶段的参数状态（如权重、优化器状态）完整保存为不可变的静态副本，常用于对比实验、模型回滚或作为基准参考点。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "withdrew",
-    "meaning": "退出",
+    "word": "The system prompt injection",
+    "meaning": "n. 系统提示词注入；一种通过精心设计的输入（如恶意提示词）绕过或篡改大型语言模型的系统指令，从而操控其输出行为的对抗性攻击技术。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "fairy-tale",
-    "meaning": "童话般的",
+    "word": "captured once",
+    "meaning": "短语 捕获一次；指在强化学习或数据采集中，单次从环境或交互中获取状态-动作对样本的过程。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "gallant",
-    "meaning": "英勇",
+    "word": "Typical entries",
+    "meaning": "n. 典型参赛作品/条目；指在AI竞赛或开源项目中，符合标准格式或具有代表性的提交方案，常作为基准参考。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "isn't aware of it",
-    "meaning": "不知道",
+    "word": "bounded",
+    "meaning": "adj. 有界的；被限制在特定范围内的",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "capacity for creativity",
-    "meaning": "创造力",
+    "word": "Entry Points",
+    "meaning": "n. 入口点；在LLM/Agent系统中，指模型或代理接收输入、启动任务或接入外部工具/API的初始接口或触发位置。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "repercussions",
-    "meaning": "反响",
+    "word": "MCP connects Claude to external services and data sources. Skills provide procedural knowledge—instructions for how to c...",
+    "meaning": "MCP 将 Claude 连接到外部服务与数据源。技能提供程序性知识——即如何完成特定任务的步骤指令。\n\n💡 通俗解释（说人话）：  \nMCP 就像 Claude 的“外接扩展坞”，让它能调用外部工具和数据库；而“技能”则是具体的操作手册，告诉 Claude 像“订机票”或“分析数据”这类任务该分几步走。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "in favour of",
-    "meaning": "赞成",
+    "word": "Model Context Protocol",
+    "meaning": "n. 模型上下文协议；一种用于标准化大型语言模型（LLM）与外部工具、数据源或智能体交互的通信协议，旨在提升上下文管理的效率与兼容性。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "pretence",
-    "meaning": "虚伪",
+    "word": "JSON-RPC",
+    "meaning": "n. JSON远程过程调用（一种轻量级的远程过程调用协议，使用JSON格式进行数据交换，常用于系统间通信）",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "settle down with",
-    "meaning": "安顿下来",
+    "word": "Protocol",
+    "meaning": "n. 协议；规程；规约；外交礼节",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "human species",
-    "meaning": "人类",
+    "word": "Messaging platforms + cron scheduler",
+    "meaning": "消息平台 + 定时任务调度器\n\n💡 技术背景说明：指结合即时通讯工具（如 Slack、Discord）与自动化定时任务系统（如 cron），用于实现基于时间的智能体（Agent）触发或通知机制。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "underpins",
-    "meaning": "支撑",
+    "word": "Flask",
+    "meaning": "n. 一个基于Python的轻量级Web框架，常用于快速构建Web应用、API接口或服务原型。",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "intellectual",
-    "meaning": "知识分子",
+    "word": "SSR",
+    "meaning": "n. 服务端渲染（Server-Side Rendering的缩写，一种在服务器端生成HTML页面的技术）",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "crucial",
-    "meaning": "至关重要的",
+    "word": "SEO",
+    "meaning": "n. 搜索引擎优化（Search Engine Optimization 的缩写），指通过优化网站内容和结构提高其在搜索引擎结果中的排名",
     "example": "",
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
   },
   {
-    "word": "millennia",
-    "meaning": "千年",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "philosopher",
-    "meaning": "哲学家",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "extolled",
-    "meaning": "颂扬的",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "virtues",
-    "meaning": "美德",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "is mindful of",
-    "meaning": "注意到",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "curtailed",
-    "meaning": "减少的",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "perceptions",
-    "meaning": "看法",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "victims",
-    "meaning": "受害者",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "emphasis",
-    "meaning": "强调",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "policies",
-    "meaning": "政策",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "concerned with",
-    "meaning": "关心",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "implications",
-    "meaning": "影响",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "base policies on",
-    "meaning": "政策依据",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "on the rest of",
-    "meaning": "其余的",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "intervened",
-    "meaning": "介入",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "indicator",
-    "meaning": "指标",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "trivial",
-    "meaning": "琐碎的",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "contrasts with",
-    "meaning": "对比于",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "fundamental",
-    "meaning": "基本的",
-    "example": "",
-    "example_zh": "",
-    "score": 50.0,
-    "reviews": 0
-  },
-  {
-    "word": "cliffs",
-    "meaning": "悬崖",
+    "word": "Postgresql",
+    "meaning": "n. PostgreSQL，一种开源关系型数据库管理系统。",
     "example": "",
     "example_zh": "",
     "score": 50.0,

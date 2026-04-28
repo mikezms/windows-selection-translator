@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>软件 UI 设计方案 (4种风格)</title>
+    <style>
+        :root {
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 40px;
+            background-color: #e5e7eb;
+            font-family: var(--font-family);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(550px, 1fr));
+            gap: 40px;
+        }
+        h2.style-title {
+            text-align: center;
+            color: #374151;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 基础通用布局 */
+        .app-window {
+            width: 100%;
+            height: 560px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .header { display: flex; align-items: center; margin-bottom: 8px; }
+        .icon { font-size: 28px; margin-right: 12px; }
+        .title { font-size: 24px; font-weight: bold; margin: 0; }
+        .subtitle { font-size: 13px; margin-bottom: 24px; margin-top: 0; }
+        .controls { padding: 20px; margin-bottom: 20px; }
+        .row { display: flex; align-items: center; margin-bottom: 16px; }
+        .row:last-child { margin-bottom: 0; }
+        .divider { height: 1px; margin: 16px 0; }
+        .log-area { flex: 1; padding: 20px; display: flex; flex-direction: column; }
+        .log-title { font-size: 15px; font-weight: bold; margin-bottom: 10px; display: flex; align-items: baseline; }
+        .log-subtitle { font-size: 12px; margin-left: 10px; font-weight: normal; }
+        .log-box { flex: 1; padding: 15px; font-size: 14px; overflow-y: auto; }
+        
+        label { display: flex; align-items: center; margin-right: 24px; font-size: 14px; cursor: pointer; }
+        input[type="checkbox"], input[type="radio"] { margin-right: 8px; cursor: pointer; }
+
+        /* =========================================
+           Style 1: 极简现代风 (Modern Light / Apple Style)
+           ========================================= */
+        .style-1 .app-window {
+            background-color: #f5f5f7;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+            color: #1d1d1f;
+            border: 1px solid #ffffff;
+        }
+        .style-1 .icon { color: #0066cc; }
+        .style-1 .subtitle { color: #86868b; }
+        .style-1 .controls {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+            border: 1px solid #f0f0f0;
+        }
+        .style-1 .divider { background: #f0f0f0; }
+        .style-1 .btn-outline {
+            background: transparent; color: #0066cc; border: 1px solid #0066cc;
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s;
+        }
+        .style-1 .btn-outline:hover { background: #f0f8ff; }
+        .style-1 .btn-primary {
+            background: #0066cc; color: #ffffff; border: none;
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 500; margin-left: 12px; transition: all 0.2s;
+        }
+        .style-1 .btn-primary:hover { background: #005bb5; }
+        .style-1 .status {
+            background: #f5f5f7; padding: 10px 15px; border-radius: 8px; font-size: 13px; color: #555;
+            display: flex; align-items: center;
+        }
+        .style-1 .status-dot { color: #34c759; margin-right: 8px; }
+        .style-1 .log-area {
+            background: #ffffff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+            border: 1px solid #f0f0f0;
+        }
+        .style-1 .log-subtitle { color: #86868b; }
+        .style-1 .log-box { background: #f9f9f9; border-radius: 8px; border: 1px solid #eee; color: #333; }
+
+        /* =========================================
+           Style 2: 极客暗黑风 (Geek Dark Mode)
+           ========================================= */
+        .style-2 .app-window {
+            background-color: #0d1117;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            font-family: "JetBrains Mono", Consolas, monospace;
+        }
+        .style-2 .title { color: #58a6ff; }
+        .style-2 .icon { color: #58a6ff; }
+        .style-2 .subtitle { color: #8b949e; }
+        .style-2 .controls {
+            background: #161b22;
+            border-radius: 8px;
+            border: 1px solid #21262d;
+        }
+        .style-2 .divider { background: #21262d; }
+        .style-2 .btn-outline {
+            background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+            padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s;
+        }
+        .style-2 .btn-outline:hover { background: #30363d; border-color: #8b949e; }
+        .style-2 .btn-primary {
+            background: #238636; color: #ffffff; border: 1px solid rgba(240,246,252,0.1);
+            padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; margin-left: 12px; transition: all 0.2s;
+        }
+        .style-2 .btn-primary:hover { background: #2ea043; }
+        .style-2 .status {
+            background: #0d1117; padding: 10px 15px; border-radius: 6px; font-size: 13px; color: #8b949e;
+            border: 1px solid #30363d; display: flex; align-items: center;
+        }
+        .style-2 .status-dot { color: #238636; margin-right: 8px; }
+        .style-2 .log-area {
+            background: #161b22; border-radius: 8px; border: 1px solid #21262d;
+        }
+        .style-2 .log-subtitle { color: #8b949e; }
+        .style-2 .log-box { background: #0d1117; border-radius: 6px; border: 1px solid #30363d; color: #c9d1d9; }
+
+        /* =========================================
+           Style 3: 玻璃拟物风 (Glassmorphism)
+           ========================================= */
+        .style-3 .app-window {
+            background: linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #2b1055;
+            position: relative;
+            z-index: 1;
+        }
+        /* 增加漂亮的背景来衬托玻璃效果 */
+        .style-3-bg {
+            position: relative;
+            background: linear-gradient(45deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+            border-radius: 24px;
+            overflow: hidden;
+        }
+        .style-3-bg::before {
+            content: ''; position: absolute; top: -50px; right: -50px; width: 200px; height: 200px;
+            background: #a18cd1; border-radius: 50%; filter: blur(50px); opacity: 0.6;
+        }
+        .style-3-bg::after {
+            content: ''; position: absolute; bottom: -50px; left: -50px; width: 200px; height: 200px;
+            background: #fbc2eb; border-radius: 50%; filter: blur(50px); opacity: 0.6;
+        }
+        .style-3 .icon { color: #ff0844; }
+        .style-3 .subtitle { color: rgba(43, 16, 85, 0.7); }
+        .style-3 .controls {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 0 10px rgba(255,255,255,0.2);
+        }
+        .style-3 .divider { background: rgba(255,255,255,0.4); }
+        .style-3 .btn-outline {
+            background: rgba(255,255,255,0.3); color: #2b1055; border: 1px solid rgba(255,255,255,0.5);
+            padding: 8px 16px; border-radius: 12px; cursor: pointer; font-weight: 600; transition: all 0.2s;
+        }
+        .style-3 .btn-outline:hover { background: rgba(255,255,255,0.5); }
+        .style-3 .btn-primary {
+            background: linear-gradient(120deg, #f093fb 0%, #f5576c 100%); color: #ffffff; border: none;
+            padding: 8px 16px; border-radius: 12px; cursor: pointer; font-weight: 600; margin-left: 12px; box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
+            transition: all 0.2s;
+        }
+        .style-3 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(245, 87, 108, 0.4); }
+        .style-3 .status {
+            background: rgba(255,255,255,0.3); padding: 10px 15px; border-radius: 12px; font-size: 13px; color: #2b1055;
+            display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.2);
+        }
+        .style-3 .status-dot { color: #ff0844; margin-right: 8px; }
+        .style-3 .log-area {
+            background: rgba(255, 255, 255, 0.25); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .style-3 .log-subtitle { color: rgba(43, 16, 85, 0.6); }
+        .style-3 .log-box { background: rgba(255,255,255,0.4); border-radius: 12px; color: #2b1055; }
+
+        /* =========================================
+           Style 4: 赛博朋克风 (Cyberpunk Neon)
+           ========================================= */
+        .style-4 .app-window {
+            background-color: #050510;
+            border-radius: 0;
+            padding: 30px;
+            box-shadow: 0 0 0 2px #050510, 0 0 0 4px #00f0ff;
+            color: #fff;
+            border: none;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .style-4 .title { color: #fcee0a; text-shadow: 2px 2px 0px #ff003c; text-transform: uppercase; font-weight: 900; letter-spacing: 2px;}
+        .style-4 .icon { color: #00f0ff; }
+        .style-4 .subtitle { color: #00f0ff; text-transform: uppercase;}
+        .style-4 .controls {
+            background: transparent;
+            border-radius: 0;
+            border: 1px solid #ff003c;
+            position: relative;
+        }
+        .style-4 .controls::before { content: ''; position: absolute; top: -5px; left: 10px; width: 40px; height: 5px; background: #050510; }
+        .style-4 .controls::after { content: 'SYS.OP'; position: absolute; top: -10px; left: 12px; color: #ff003c; font-size: 10px; }
+        
+        .style-4 .divider { background: #ff003c; opacity: 0.5; }
+        .style-4 .btn-outline {
+            background: transparent; color: #00f0ff; border: 1px solid #00f0ff;
+            padding: 8px 16px; border-radius: 0; cursor: pointer; font-weight: bold; text-transform: uppercase;
+            transition: all 0.2s; box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.2);
+        }
+        .style-4 .btn-outline:hover { background: rgba(0, 240, 255, 0.2); box-shadow: 0 0 15px rgba(0, 240, 255, 0.5); }
+        .style-4 .btn-primary {
+            background: #ff003c; color: #fff; border: 1px solid #ff003c;
+            padding: 8px 16px; border-radius: 0; cursor: pointer; font-weight: bold; margin-left: 12px; text-transform: uppercase;
+            transition: all 0.2s; position: relative; overflow: hidden;
+        }
+        .style-4 .btn-primary:hover { background: transparent; color: #ff003c; box-shadow: 0 0 15px rgba(255, 0, 60, 0.6); }
+        .style-4 .status {
+            background: rgba(255,0,60,0.1); padding: 10px 15px; border-radius: 0; font-size: 13px; color: #fff;
+            border: 1px dashed #ff003c; display: flex; align-items: center; text-transform: uppercase;
+        }
+        .style-4 .status-dot { color: #fcee0a; margin-right: 8px; text-shadow: 0 0 5px #fcee0a; }
+        .style-4 .log-area {
+            background: transparent; border-radius: 0; border: 1px solid #00f0ff; position: relative; margin-top: 10px;
+        }
+        .style-4 .log-area::after { content: 'LOG.DAT'; position: absolute; bottom: -10px; right: 12px; color: #00f0ff; font-size: 10px; background: #050510; padding: 0 5px;}
+        .style-4 .log-subtitle { color: rgba(0,240,255,0.5); }
+        .style-4 .log-box { background: rgba(0, 240, 255, 0.05); border: none; color: #00f0ff; border-left: 2px solid #00f0ff;}
+        
+        .style-4 input[type="radio"], .style-4 input[type="checkbox"] { accent-color: #ff003c; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 方案 1 -->
+    <div class="wrapper">
+        <h2 class="style-title">Style 1: 极简苹果风 (Modern Minimalist)</h2>
+        <div class="style-1">
+            <div class="app-window">
+                <div class="header">
+                    <span class="icon">⚡</span>
+                    <h1 class="title">新名称 (暂定)</h1>
+                </div>
+                <p class="subtitle">选中文字后按 Ctrl + L · 自动翻译 · 一键朗读 · 收录生词本</p>
+
+                <div class="controls">
+                    <div class="row">
+                        <label><input type="checkbox" checked> 启用划词翻译 (Ctrl + L)</label>
+                        <label><input type="checkbox" checked> 鼠标旁悬浮提示</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row">
+                        <span style="font-size: 13px; color: #86868b; margin-right: 20px;">翻译源</span>
+                        <label><input type="radio" name="src1" checked> MyMemory (免梯)</label>
+                        <label><input type="radio" name="src1"> Google (需代理)</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row" style="margin-bottom: 0;">
+                        <button class="btn-outline">清空记录</button>
+                        <button class="btn-primary">📖 打开生词本</button>
+                    </div>
+                </div>
+
+                <div class="status">
+                    <span class="status-dot">●</span> 已开启 — Ctrl + L 翻译
+                </div>
+
+                <div style="height: 20px;"></div>
+
+                <div class="log-area">
+                    <div class="log-title">翻译记录 <span class="log-subtitle">最近的翻译会显示在这里</span></div>
+                    <div class="log-box">
+                        <span style="color:#0066cc; font-weight:bold;">[11:30:00] 原文：Hello World</span><br>
+                        <span style="color:#34c759;">     译文：你好，世界</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 2 -->
+    <div class="wrapper">
+        <h2 class="style-title">Style 2: 极客暗黑风 (Geek Dark Mode)</h2>
+        <div class="style-2">
+            <div class="app-window">
+                <div class="header">
+                    <span class="icon">⚡</span>
+                    <h1 class="title">新名称 (暂定)</h1>
+                </div>
+                <p class="subtitle">选中文字后按 Ctrl + L · 自动翻译 · 一键朗读 · 收录生词本</p>
+
+                <div class="controls">
+                    <div class="row">
+                        <label><input type="checkbox" checked> 启用划词翻译 (Ctrl + L)</label>
+                        <label><input type="checkbox" checked> 鼠标旁悬浮提示</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row">
+                        <span style="font-size: 13px; color: #8b949e; margin-right: 20px;">翻译源</span>
+                        <label><input type="radio" name="src2" checked> MyMemory (免梯)</label>
+                        <label><input type="radio" name="src2"> Google (需代理)</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row" style="margin-bottom: 0;">
+                        <button class="btn-outline">清空记录</button>
+                        <button class="btn-primary">📖 打开生词本</button>
+                    </div>
+                </div>
+
+                <div class="status">
+                    <span class="status-dot">●</span> 已开启 — Ctrl + L 翻译
+                </div>
+
+                <div style="height: 20px;"></div>
+
+                <div class="log-area">
+                    <div class="log-title">翻译记录 <span class="log-subtitle">最近的翻译会显示在这里</span></div>
+                    <div class="log-box">
+                        <span style="color:#58a6ff; font-weight:bold;">[11:30:00] 原文：Hello World</span><br>
+                        <span style="color:#2ea043;">     译文：你好，世界</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 3 -->
+    <div class="wrapper">
+        <h2 class="style-title">Style 3: 玻璃拟物风 (Glassmorphism)</h2>
+        <div class="style-3-bg">
+            <div class="style-3">
+                <div class="app-window">
+                    <div class="header">
+                        <span class="icon">⚡</span>
+                        <h1 class="title">新名称 (暂定)</h1>
+                    </div>
+                    <p class="subtitle">选中文字后按 Ctrl + L · 自动翻译 · 一键朗读 · 收录生词本</p>
+
+                    <div class="controls">
+                        <div class="row">
+                            <label><input type="checkbox" checked> 启用划词翻译 (Ctrl + L)</label>
+                            <label><input type="checkbox" checked> 鼠标旁悬浮提示</label>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="row">
+                            <span style="font-size: 13px; color: rgba(43,16,85,0.7); margin-right: 20px;">翻译源</span>
+                            <label><input type="radio" name="src3" checked> MyMemory (免梯)</label>
+                            <label><input type="radio" name="src3"> Google (需代理)</label>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="row" style="margin-bottom: 0;">
+                            <button class="btn-outline">清空记录</button>
+                            <button class="btn-primary">📖 打开生词本</button>
+                        </div>
+                    </div>
+
+                    <div class="status">
+                        <span class="status-dot">●</span> 已开启 — Ctrl + L 翻译
+                    </div>
+
+                    <div style="height: 20px;"></div>
+
+                    <div class="log-area">
+                        <div class="log-title">翻译记录 <span class="log-subtitle">最近的翻译会显示在这里</span></div>
+                        <div class="log-box">
+                            <span style="color:#ff0844; font-weight:bold;">[11:30:00] 原文：Hello World</span><br>
+                            <span style="color:#009e54;">     译文：你好，世界</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方案 4 -->
+    <div class="wrapper">
+        <h2 class="style-title">Style 4: 赛博朋克风 (Cyberpunk Neon)</h2>
+        <div class="style-4">
+            <div class="app-window">
+                <div class="header">
+                    <span class="icon">⚡</span>
+                    <h1 class="title">新名称 (暂定)</h1>
+                </div>
+                <p class="subtitle">选中文字后按 Ctrl + L · 自动翻译 · 一键朗读 · 收录生词本</p>
+
+                <div class="controls">
+                    <div class="row">
+                        <label><input type="checkbox" checked> 启用划词翻译 (Ctrl + L)</label>
+                        <label><input type="checkbox" checked> 鼠标旁悬浮提示</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row">
+                        <span style="font-size: 13px; color: #ff003c; margin-right: 20px;">翻译源</span>
+                        <label><input type="radio" name="src4" checked> MyMemory (免梯)</label>
+                        <label><input type="radio" name="src4"> Google (需代理)</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row" style="margin-bottom: 0;">
+                        <button class="btn-outline">清空记录</button>
+                        <button class="btn-primary">📖 打开生词本</button>
+                    </div>
+                </div>
+
+                <div class="status">
+                    <span class="status-dot">●</span> 已开启 — Ctrl + L 翻译
+                </div>
+
+                <div style="height: 20px;"></div>
+
+                <div class="log-area">
+                    <div class="log-title">翻译记录 <span class="log-subtitle">最近的翻译会显示在这里</span></div>
+                    <div class="log-box">
+                        <span style="color:#fcee0a; font-weight:bold;">[11:30:00] 原文：Hello World</span><br>
+                        <span style="color:#ff003c;">     译文：你好，世界</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
