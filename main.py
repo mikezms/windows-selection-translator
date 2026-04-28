@@ -32,7 +32,7 @@ MAX_TEXT_LENGTH = 120
 class UnifiedApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("LingoLens - 全域词典")
+        self.root.title("得意划词翻译")
         self.root.geometry("860x640")
         self.root.minsize(700, 500)
         self.root.configure(bg=UI_BG)
@@ -50,6 +50,8 @@ class UnifiedApp:
         self.vocab = vocab_store.load(VOCAB_PATH)
         normalize_scores(self.vocab)
         self.sort_mode_var = tk.StringVar(value="最新添加")
+        self._selected_vocab_index = 0
+        self.vocab_rows = []
         
         # 悬浮窗和快捷键
         self.floating = None
@@ -73,11 +75,8 @@ class UnifiedApp:
 
     def _append_log(self, original, result):
         ts = time.strftime("%H:%M:%S")
-        self.log_text.configure(state="normal")
-        self.log_text.insert("end", f"[{ts}] 原文：{original}\n", "orig")
-        self.log_text.insert("end", f"     译文：{result}\n\n", "trans")
-        self.log_text.see("end")
-        self.log_text.configure(state="disabled")
+        item = {"timestamp": ts, "original": original, "translated": result}
+        self._insert_history_item(item, at_top=True)
         
         # 存入文件
         import history_store
@@ -86,9 +85,7 @@ class UnifiedApp:
         history_store.save(hist_items)
 
     def _clear_log(self):
-        self.log_text.configure(state="normal")
-        self.log_text.delete("1.0", "end")
-        self.log_text.configure(state="disabled")
+        self._clear_history_view()
         
         import history_store
         history_store.save([])
@@ -140,7 +137,7 @@ class UnifiedApp:
         # 品牌
         brand = tk.Frame(self.sidebar, bg=UI_BG_ALT, pady=24, padx=16)
         brand.pack(fill="x")
-        tk.Label(brand, text="⚡ LingoLens", bg=UI_BG_ALT, fg=UI_ACCENT, font=tkfont.Font(family=FONT_FAMILY, size=16, weight="bold")).pack(anchor="w")
+        tk.Label(brand, text="⚡ 得意翻译", bg=UI_BG_ALT, fg=UI_ACCENT, font=tkfont.Font(family=FONT_FAMILY, size=16, weight="bold")).pack(anchor="w")
 
         # 导航
         nav = tk.Frame(self.sidebar, bg=UI_BG_ALT, padx=12)
@@ -163,22 +160,22 @@ class UnifiedApp:
         settings = tk.Frame(self.sidebar, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER, padx=12, pady=16)
         settings.pack(side="bottom", fill="x", padx=12, pady=24)
 
-        tk.Label(settings, text="快速控制", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 10))
+        tk.Label(settings, text="快捷开关", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 10))
         
         chk_kw = dict(bg=UI_CARD, fg=UI_TEXT_SOFT, activebackground=UI_CARD, activeforeground=UI_TEXT,
                       selectcolor=UI_CHIP, font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
         
-        tk.Checkbutton(settings, text="划词翻译 (Alt+T)", variable=self.enable_var, command=self._on_enable_toggle, **chk_kw).pack(anchor="w", pady=2)
-        tk.Checkbutton(settings, text="鼠标悬浮提示", variable=self.floating_var, **chk_kw).pack(anchor="w", pady=2)
+        tk.Checkbutton(settings, text="启用快捷键翻译", variable=self.enable_var, command=self._on_enable_toggle, **chk_kw).pack(anchor="w", pady=2)
+        tk.Checkbutton(settings, text="翻译后弹出悬浮窗", variable=self.floating_var, **chk_kw).pack(anchor="w", pady=2)
 
         tk.Frame(settings, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=10)
-        tk.Label(settings, text="翻译引擎", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 6))
+        tk.Label(settings, text="翻译方式", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 6))
         
         rb_kw = dict(bg=UI_CARD, activebackground=UI_CARD, fg=UI_TEXT_SOFT, selectcolor=UI_CHIP,
                      font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
-        tk.Radiobutton(settings, text="MyMemory (免代理)", variable=self.translate_source_var, value="mymemory", **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="Google Translate", variable=self.translate_source_var, value="google", **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="DeepSeek (AI 前沿语境)", variable=self.translate_source_var, value="deepseek", **rb_kw).pack(anchor="w")
+        tk.Radiobutton(settings, text="通用快速翻译", variable=self.translate_source_var, value="mymemory", **rb_kw).pack(anchor="w")
+        tk.Radiobutton(settings, text="Google 翻译", variable=self.translate_source_var, value="google", **rb_kw).pack(anchor="w")
+        tk.Radiobutton(settings, text="AI 技术语境翻译", variable=self.translate_source_var, value="deepseek", **rb_kw).pack(anchor="w")
 
     def _switch_tab(self, tab_id):
         # 更新按钮样式
@@ -216,14 +213,67 @@ class UnifiedApp:
         card = tk.Frame(self.history_frame, bg=UI_CARD, highlightbackground=UI_BORDER, highlightthickness=1, padx=2, pady=2)
         card.pack(fill="both", expand=True)
         
-        self.log_text = scrolledtext.ScrolledText(
-            card, wrap="word", state="disabled", font=tkfont.Font(family=FONT_FAMILY, size=11),
-            bg=UI_LOG_BG, fg=UI_TEXT, insertbackground=UI_TEXT, relief="flat", bd=0, padx=16, pady=16, highlightthickness=0,
-            spacing1=6, spacing3=6
+        self.history_text = scrolledtext.ScrolledText(
+            card, wrap="word", state="disabled", font=tkfont.Font(family=FONT_FAMILY, size=10),
+            bg=UI_LOG_BG, fg=UI_TEXT, insertbackground=UI_TEXT, relief="flat", bd=0,
+            padx=16, pady=16, highlightthickness=0, spacing1=3, spacing3=7
         )
-        self.log_text.pack(fill="both", expand=True)
-        self.log_text.tag_configure("orig", foreground=UI_TEXT_SOFT, font=tkfont.Font(family=FONT_FAMILY, size=11, weight="bold"))
-        self.log_text.tag_configure("trans", foreground=UI_ACCENT)
+        self.history_text.pack(fill="both", expand=True)
+        self.history_text.tag_configure(
+            "card_start",
+            spacing1=10,
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
+        self.history_text.tag_configure(
+            "time",
+            foreground=UI_ACCENT,
+            background=UI_CHIP,
+            font=tkfont.Font(family=FONT_FAMILY, size=8, weight="bold"),
+        )
+        self.history_text.tag_configure(
+            "orig",
+            foreground=UI_TEXT,
+            font=tkfont.Font(family=FONT_FAMILY, size=11, weight="bold"),
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
+        self.history_text.tag_configure(
+            "section",
+            foreground=UI_TEXT_MUTED,
+            font=tkfont.Font(family=FONT_FAMILY, size=8, weight="bold"),
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
+        self.history_text.tag_configure(
+            "trans",
+            foreground=UI_ACCENT,
+            font=tkfont.Font(family=FONT_FAMILY, size=10),
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
+        self.history_text.tag_configure(
+            "note",
+            foreground=UI_TEXT_SOFT,
+            background=UI_BG_ALT,
+            font=tkfont.Font(family=FONT_FAMILY, size=9),
+            lmargin1=18,
+            lmargin2=18,
+            rmargin=18,
+            spacing1=6,
+            spacing3=6,
+        )
+        self.history_text.tag_configure(
+            "divider",
+            foreground=UI_BORDER,
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
 
         # 状态提示
         status = tk.Frame(self.history_frame, bg=UI_STATUS_BG, padx=12, pady=10, highlightthickness=0)
@@ -234,16 +284,60 @@ class UnifiedApp:
         # 加载历史记录
         import history_store
         hist_items = history_store.load()
-        if hist_items:
-            self.log_text.configure(state="normal")
-            for item in hist_items:
-                ts = item.get("timestamp", "")
-                orig = item.get("original", "")
-                trans = item.get("translated", "")
-                self.log_text.insert("end", f"[{ts}] 原文：{orig}\n", "orig")
-                self.log_text.insert("end", f"     译文：{trans}\n\n", "trans")
-            self.log_text.see("end")
-            self.log_text.configure(state="disabled")
+        self._render_history(hist_items)
+
+    def _render_history(self, items):
+        self._clear_history_view()
+        self.history_text.configure(state="normal")
+        for item in reversed(items or []):
+            self._write_history_item(item)
+        self.history_text.configure(state="disabled")
+        self.history_text.yview_moveto(0)
+
+    def _clear_history_view(self):
+        self.history_text.configure(state="normal")
+        self.history_text.delete("1.0", "end")
+        self.history_text.configure(state="disabled")
+
+    @staticmethod
+    def _split_translation_sections(text):
+        raw = str(text or "").strip()
+        markers = ["💡 技术背景说明：", "💡 通俗解释（说人话）：", "技术背景说明：", "通俗解释（说人话）："]
+        for marker in markers:
+            if marker in raw:
+                before, after = raw.split(marker, 1)
+                return before.strip(), (marker + after).strip()
+        return raw, ""
+
+    def _insert_history_item(self, item, at_top=False):
+        self.history_text.configure(state="normal")
+        self._write_history_item(item, index="1.0" if at_top else "end")
+        self.history_text.configure(state="disabled")
+        if at_top:
+            self.history_text.yview_moveto(0)
+
+    def _write_history_item(self, item, index="end"):
+        ts = str(item.get("timestamp", ""))
+        original = str(item.get("original", ""))
+        translated = str(item.get("translated", ""))
+        main_trans, note = self._split_translation_sections(translated)
+
+        segments = [
+            (f"{ts}  ", ("time", "card_start")),
+            (f"{original}\n", ("orig", "card_start")),
+            ("译文\n", ("section",)),
+            (f"{main_trans or translated}\n", ("trans",)),
+        ]
+        if note:
+            segments.append((f"{note}\n", ("note",)))
+        segments.append(("\n", ("divider",)))
+
+        if index == "1.0":
+            for text, tags in reversed(segments):
+                self.history_text.insert(index, text, tags)
+            return
+        for text, tags in segments:
+            self.history_text.insert(index, text, tags)
 
     # ---- 生词本 Tab (Master-Detail UX) ----
     def _build_vocab_tab(self):
@@ -268,19 +362,23 @@ class UnifiedApp:
         sort_menu["menu"].configure(bg=UI_CARD, fg=UI_TEXT_SOFT, activebackground=UI_CHIP, activeforeground=UI_ACCENT)
         sort_menu.pack(fill="x")
 
-        # 使用 Listbox 实现极简列表
         list_frame = tk.Frame(left_fr, bg=UI_CARD)
         list_frame.pack(fill="both", expand=True)
-        scrollbar = tk.Scrollbar(list_frame)
-        scrollbar.pack(side="right", fill="y")
-        self.vocab_listbox = tk.Listbox(
-            list_frame, yscrollcommand=scrollbar.set, bg=UI_CARD, fg=UI_TEXT,
-            selectbackground=UI_CHIP, selectforeground=UI_ACCENT, relief="flat", bd=0, highlightthickness=0,
-            font=tkfont.Font(family=FONT_FAMILY, size=11), activestyle="none"
+        self.vocab_canvas = tk.Canvas(
+            list_frame, bg=UI_CARD, highlightthickness=0, bd=0,
+            yscrollincrement=18
         )
-        self.vocab_listbox.pack(side="left", fill="both", expand=True, padx=(4,0), pady=4)
-        scrollbar.config(command=self.vocab_listbox.yview)
-        self.vocab_listbox.bind("<<ListboxSelect>>", self._on_vocab_select)
+        scrollbar = tk.Scrollbar(list_frame, command=self.vocab_canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.vocab_canvas.pack(side="left", fill="both", expand=True)
+        self.vocab_canvas.configure(yscrollcommand=scrollbar.set)
+        self.vocab_list_inner = tk.Frame(self.vocab_canvas, bg=UI_CARD)
+        self._vocab_window = self.vocab_canvas.create_window(
+            (0, 0), window=self.vocab_list_inner, anchor="nw"
+        )
+        self.vocab_list_inner.bind("<Configure>", self._on_vocab_list_configure)
+        self.vocab_canvas.bind("<Configure>", self._on_vocab_canvas_configure)
+        self.vocab_canvas.bind("<MouseWheel>", self._on_vocab_mousewheel)
 
         # Right: Detail View
         self.detail_fr = tk.Frame(split, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER, padx=24, pady=24)
@@ -305,19 +403,38 @@ class UnifiedApp:
 
         top_row = tk.Frame(self.detail_top_fr, bg=UI_CARD)
         top_row.pack(fill="x")
-        word_lbl = tk.Label(top_row, textvariable=self.v_word_var, bg=UI_CARD, fg=UI_TEXT, font=tkfont.Font(family=FONT_FAMILY, size=24, weight="bold"))
-        word_lbl.pack(side="left")
+        title_col = tk.Frame(top_row, bg=UI_CARD)
+        title_col.pack(side="left", fill="x", expand=True)
+        self.word_lbl = tk.Label(
+            title_col, textvariable=self.v_word_var, bg=UI_CARD, fg=UI_TEXT,
+            font=tkfont.Font(family=FONT_FAMILY, size=24, weight="bold"),
+            anchor="w", justify="left"
+        )
+        self.word_lbl.pack(fill="x", anchor="w")
+
+        action_row = tk.Frame(top_row, bg=UI_CARD)
+        action_row.pack(side="right", anchor="n", padx=(12, 0))
+        btn_speak = tk.Button(action_row, text="♪", command=self._speak_current_vocab, bg=UI_CARD, fg=UI_INFO, relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=16), cursor="hand2")
+        btn_speak.pack(side="left", padx=(0, 8))
         
-        btn_speak = tk.Button(top_row, text="♪", command=self._speak_current_vocab, bg=UI_CARD, fg=UI_INFO, relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=16), cursor="hand2")
-        btn_speak.pack(side="left", padx=(8,0))
-        
-        self.btn_gen = tk.Button(top_row, text="✨ AI扩展", command=self._gen_example_current, bg=UI_CHIP, fg=UI_ACCENT, activebackground=UI_ACCENT, activeforeground="#ffffff", relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"), cursor="hand2", padx=10, pady=4)
-        self.btn_gen.pack(side="right")
+        self.btn_gen = tk.Button(action_row, text="✨ AI扩展", command=self._gen_example_current, bg=UI_CHIP, fg=UI_ACCENT, activebackground=UI_ACCENT, activeforeground="#ffffff", relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"), cursor="hand2", padx=10, pady=4)
+        self.btn_gen.pack(side="left")
         hover_bind(self.btn_gen, UI_CHIP, UI_ACCENT, fg=UI_ACCENT, hover_fg="#ffffff")
 
-        tk.Label(self.detail_top_fr, textvariable=self.v_stats_var, bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9)).pack(anchor="w", pady=(2, 16))
+        tk.Label(self.detail_top_fr, textvariable=self.v_stats_var, bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9)).pack(anchor="w", pady=(2, 14))
+
+        self.source_wrap = tk.Frame(self.detail_top_fr, bg=UI_BG_ALT, highlightbackground=UI_BORDER_SOFT, highlightthickness=1, padx=12, pady=10)
+        tk.Label(self.source_wrap, text="完整原文", bg=UI_BG_ALT, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 6))
+        self.source_text = tk.Text(
+            self.source_wrap, height=3, wrap="word", state="disabled",
+            bg=UI_BG_ALT, fg=UI_TEXT_SOFT, relief="flat", bd=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=10),
+            padx=0, pady=0, highlightthickness=0, cursor="arrow"
+        )
+        self.source_text.pack(fill="x")
         
-        tk.Label(self.detail_top_fr, text="翻译释义", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
+        self.meaning_title_lbl = tk.Label(self.detail_top_fr, text="翻译释义", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"))
+        self.meaning_title_lbl.pack(anchor="w")
         self.meaning_lbl = tk.Label(self.detail_top_fr, textvariable=self.v_meaning_var, bg=UI_CARD, fg=UI_MEANING, font=tkfont.Font(family=FONT_FAMILY, size=14), anchor="w", justify="left")
         self.meaning_lbl.pack(fill="x", anchor="w", pady=(4, 20))
         
@@ -363,13 +480,133 @@ class UnifiedApp:
         # 动态调整换行长度
         self.detail_fr.bind("<Configure>", self._on_detail_resize)
 
+    def _on_vocab_list_configure(self, event):
+        self.vocab_canvas.configure(scrollregion=self.vocab_canvas.bbox("all"))
+
+    def _on_vocab_canvas_configure(self, event):
+        self.vocab_canvas.itemconfigure(self._vocab_window, width=event.width)
+        for row in getattr(self, "vocab_rows", []):
+            lbl = row.get("label")
+            if lbl:
+                lbl.configure(wraplength=max(120, event.width - 28))
+
+    def _on_vocab_mousewheel(self, event):
+        self.vocab_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    @staticmethod
+    def _entry_kind(text):
+        s = (text or "").strip()
+        if len(s) > 55 or any(p in s for p in ".!?。！？；;：:"):
+            return "句子"
+        if " " in s:
+            return "短语"
+        return "单词"
+
+    @staticmethod
+    def _list_preview(text, max_chars=90):
+        s = " ".join(str(text or "").split())
+        if len(s) <= max_chars:
+            return s
+        return s[:max_chars - 3].rstrip() + "..."
+
+    def _make_vocab_row(self, parent, item, idx):
+        word = str(item.get("word", ""))
+        score = item_score(item)
+        kind = self._entry_kind(word)
+
+        row = tk.Frame(parent, bg=UI_CARD, padx=10, pady=8, cursor="hand2")
+        row.pack(fill="x", padx=6, pady=(0, 2))
+
+        label = tk.Label(
+            row, text=self._list_preview(word), bg=UI_CARD, fg=UI_TEXT,
+            font=tkfont.Font(family=FONT_FAMILY, size=10),
+            anchor="w", justify="left", cursor="hand2"
+        )
+        label.pack(fill="x", anchor="w")
+
+        meta = tk.Label(
+            row, text=f"{kind}  ·  {score:.0f}/100", bg=UI_CARD, fg=UI_TEXT_MUTED,
+            font=tkfont.Font(family=FONT_FAMILY, size=8),
+            anchor="w", cursor="hand2"
+        )
+        meta.pack(fill="x", anchor="w", pady=(2, 0))
+
+        row_info = {"frame": row, "label": label, "meta": meta}
+        self.vocab_rows.append(row_info)
+        for widget in (row, label, meta):
+            widget.bind("<Button-1>", lambda _e, i=idx: self._select_vocab_index(i))
+            widget.bind("<MouseWheel>", self._on_vocab_mousewheel)
+        return row_info
+
+    def _select_vocab_index(self, idx):
+        if idx < 0 or idx >= len(self.display_list):
+            return
+        self._selected_vocab_index = idx
+        self._refresh_vocab_row_styles()
+        self._on_vocab_select(None)
+
+    def _refresh_vocab_row_styles(self):
+        for idx, row in enumerate(getattr(self, "vocab_rows", [])):
+            selected = idx == self._selected_vocab_index
+            bg = UI_CHIP if selected else UI_CARD
+            fg = UI_ACCENT if selected else UI_TEXT
+            meta_fg = UI_ACCENT_DARK if selected else UI_TEXT_MUTED
+            for widget in (row["frame"], row["label"], row["meta"]):
+                widget.configure(bg=bg)
+            row["label"].configure(fg=fg)
+            row["meta"].configure(fg=meta_fg)
+
+    def _scroll_selected_vocab_into_view(self):
+        if not getattr(self, "vocab_rows", None):
+            return
+        idx = min(max(self._selected_vocab_index, 0), len(self.vocab_rows) - 1)
+        row = self.vocab_rows[idx]["frame"]
+        self.root.update_idletasks()
+        inner_h = max(1, self.vocab_list_inner.winfo_height())
+        canvas_h = max(1, self.vocab_canvas.winfo_height())
+        y = row.winfo_y()
+        row_h = row.winfo_height()
+        top = self.vocab_canvas.canvasy(0)
+        bottom = top + canvas_h
+        if y < top:
+            self.vocab_canvas.yview_moveto(y / inner_h)
+        elif y + row_h > bottom:
+            self.vocab_canvas.yview_moveto(max(0, (y + row_h - canvas_h) / inner_h))
+
+    def _font_for_vocab_title(self, text):
+        n = len(str(text or ""))
+        if n <= 24:
+            return tkfont.Font(family=FONT_FAMILY, size=24, weight="bold")
+        if n <= 70:
+            return tkfont.Font(family=FONT_FAMILY, size=18, weight="bold")
+        return tkfont.Font(family=FONT_FAMILY, size=13, weight="bold")
+
+    def _update_source_block(self, text):
+        show = self._entry_kind(text) != "单词"
+        if show:
+            if not self.source_wrap.winfo_ismapped():
+                self.source_wrap.pack(fill="x", pady=(0, 16), before=self.meaning_title_lbl)
+            self.source_text.configure(state="normal")
+            self.source_text.delete("1.0", "end")
+            self.source_text.insert("1.0", str(text or ""))
+            line_count = max(3, min(6, int(len(str(text or "")) / 54) + 2))
+            self.source_text.configure(height=line_count, state="disabled")
+        else:
+            self.source_wrap.pack_forget()
+
     def _on_detail_resize(self, event):
         w = event.width
         # safe wrap limits based on the width of detail_fr
+        title_wrap = max(160, w - 180)
+        source_wrap = max(100, w - 80)
         meaning_wrap = max(100, w - 48)
         ex_en_wrap = max(100, w - 80) # padding for the button
         ex_zh_wrap = max(100, w - 48)
         
+        if hasattr(self, 'word_lbl'):
+            self.word_lbl.configure(wraplength=title_wrap)
+        if hasattr(self, 'source_text'):
+            self.source_text.configure(width=max(20, source_wrap // 8))
         if hasattr(self, 'meaning_lbl'):
             self.meaning_lbl.configure(wraplength=meaning_wrap)
         if hasattr(self, 'ex_en_lbl'):
@@ -393,14 +630,19 @@ class UnifiedApp:
         elif mode == "A-Z":
             self.display_list.sort(key=lambda x: str(x.get("word","")).lower())
             
-        self.vocab_listbox.delete(0, tk.END)
-        for it in self.display_list:
-            self.vocab_listbox.insert(tk.END, " " + str(it.get("word", "")))
-            
+        for child in self.vocab_list_inner.winfo_children():
+            child.destroy()
+        self.vocab_rows = []
+        for idx, it in enumerate(self.display_list):
+            self._make_vocab_row(self.vocab_list_inner, it, idx)
+
         if self.display_list:
-            self.vocab_listbox.selection_set(0)
+            self._selected_vocab_index = min(self._selected_vocab_index, len(self.display_list) - 1)
+            self._refresh_vocab_row_styles()
+            self._scroll_selected_vocab_into_view()
             self._on_vocab_select(None)
         else:
+            self._selected_vocab_index = 0
             self._clear_detail()
 
     def _clear_detail(self):
@@ -409,16 +651,25 @@ class UnifiedApp:
         self.v_stats_var.set("")
         self.v_ex_en.set("")
         self.v_ex_zh.set("")
+        if hasattr(self, "source_wrap"):
+            self.source_wrap.pack_forget()
 
     def _current_vocab(self):
-        sel = self.vocab_listbox.curselection()
-        if not sel: return None
-        return self.display_list[sel[0]]
+        if not self.display_list:
+            return None
+        if self._selected_vocab_index < 0 or self._selected_vocab_index >= len(self.display_list):
+            return None
+        return self.display_list[self._selected_vocab_index]
 
     def _on_vocab_select(self, event):
         it = self._current_vocab()
         if not it: return
-        self.v_word_var.set(str(it.get("word", "")))
+        word = str(it.get("word", ""))
+        self.v_word_var.set(word)
+        if hasattr(self, "word_lbl"):
+            self.word_lbl.configure(font=self._font_for_vocab_title(word))
+        if hasattr(self, "source_wrap"):
+            self._update_source_block(word)
         self.v_meaning_var.set(str(it.get("meaning", "")))
         
         sc = item_score(it)
@@ -493,16 +744,13 @@ class UnifiedApp:
             vocab_store.save(self.vocab, VOCAB_PATH)
             
         # 自动跳下一个
-        sel = self.vocab_listbox.curselection()
-        if sel:
-            idx = sel[0]
-            if idx + 1 < self.vocab_listbox.size():
-                self.vocab_listbox.selection_clear(0, tk.END)
-                self.vocab_listbox.selection_set(idx + 1)
-                self.vocab_listbox.see(idx + 1)
-                self._on_vocab_select(None)
-            else:
-                self._load_vocab_list() # 重新排序或刷新
+        idx = self._selected_vocab_index
+        if idx + 1 < len(self.display_list):
+            self._select_vocab_index(idx + 1)
+            self._scroll_selected_vocab_into_view()
+        else:
+            self._selected_vocab_index = 0
+            self._load_vocab_list() # 重新排序或刷新
 
     # ---- 生命周期 ----
     def _on_close(self):
