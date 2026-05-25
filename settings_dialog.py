@@ -346,7 +346,10 @@ class ApiSettingsDialog:
         self.refresh_models_btn.configure(state="disabled", text="获取中")
 
         def _worker() -> None:
-            ok, result = deepseek.fetch_models(cfg)
+            try:
+                ok, result = deepseek.fetch_models(cfg)
+            except Exception as exc:
+                ok, result = False, deepseek.friendly_api_error(exc)
             if not self.win.winfo_exists():
                 return
             self.win.after(0, lambda: self._on_refresh_models_done(ok, result))
@@ -377,15 +380,23 @@ class ApiSettingsDialog:
             label = f"{provider}: {label}"
         return label
 
+    def _set_saved_models(self, models: list[dict] | None) -> None:
+        self.saved_models = list(models or [])
+        self._refresh_saved_models_menu()
+
     def _refresh_saved_models_menu(self) -> None:
         menu = self.saved_model_menu["menu"]
         menu.delete(0, "end")
-        labels = [self._saved_model_label(item) for item in self.saved_models if self._saved_model_label(item)]
+        labels = []
+        for item in self.saved_models:
+            label = self._saved_model_label(item)
+            if label:
+                labels.append(label)
         if not labels:
             labels = ["暂无已保存模型"]
         for label in labels:
             menu.add_command(label=label, command=lambda v=label: self.saved_models_var.set(v))
-        self.saved_models_var.set(labels[0])
+        self.saved_models_var.set(labels[0] if labels else "")
 
     def _load_selected_model(self) -> None:
         selected = self.saved_models_var.get()
@@ -404,7 +415,10 @@ class ApiSettingsDialog:
         self.test_btn.configure(state="disabled", text="测试中...")
 
         def _worker() -> None:
-            ok, msg = deepseek.test_connection(cfg)
+            try:
+                ok, msg = deepseek.test_connection(cfg)
+            except Exception as exc:
+                ok, msg = False, deepseek.friendly_api_error(exc)
             if not self.win.winfo_exists():
                 return
             self.win.after(0, lambda: self._on_test_done(ok, msg))
@@ -444,7 +458,7 @@ class ApiSettingsDialog:
             form_cfg["ai_base_url"],
             form_cfg["ai_model"],
         )
-        self.saved_models = list(wrapped.get("ai_models") or [])
+        self._set_saved_models(wrapped.get("ai_models"))
         cfg["ai_models"] = self.saved_models
         app_config.save_config(cfg)
         self.result = True
