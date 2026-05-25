@@ -2,7 +2,6 @@
 import json
 import re
 from functools import lru_cache
-from urllib.parse import urljoin
 
 import requests
 
@@ -16,6 +15,29 @@ MODEL_TIMEOUT = (8, 20)
 ARTICLE_TRANSLATE_THRESHOLD = 320
 
 
+def _load_config_snapshot(config: dict | None = None) -> dict:
+    if config is None:
+        return dict(app_config.load_config())
+    return dict(config)
+
+
+def _config_text(config: dict, key: str, default: str = "") -> str:
+    return str(config.get(key) or default).strip()
+
+
+def _resolve_request_config(
+    config: dict | None = None,
+    *,
+    provider_default: str = "custom",
+) -> tuple[dict, str, str, str, str]:
+    cfg = _load_config_snapshot(config)
+    provider = _config_text(cfg, "ai_provider", provider_default)
+    key = _config_text(cfg, "ai_api_key")
+    base_url = app_config.effective_base_url(provider, _config_text(cfg, "ai_base_url"))
+    model = _config_text(cfg, "ai_model")
+    return cfg, provider, key, base_url, model
+
+
 def read_api_key() -> str:
     """读取当前配置里的 API Key，保留旧函数名用于兼容。"""
     return str(app_config.load_config().get("ai_api_key") or "").strip()
@@ -24,12 +46,9 @@ def read_api_key() -> str:
 def get_client():
     """懒加载 + 单例。仅 OpenAI 兼容接口返回 client；Gemini 使用 REST。"""
     global _CLIENT, _CLIENT_KEY
-    cfg = app_config.load_config()
-    if app_config.provider_kind(str(cfg.get("ai_provider") or "")) != "openai_compatible":
+    _cfg, provider, key, base_url, _model = _resolve_request_config()
+    if app_config.provider_kind(provider) != "openai_compatible":
         return None
-    key = str(cfg.get("ai_api_key") or "").strip()
-    provider = str(cfg.get("ai_provider") or "custom")
-    base_url = app_config.effective_base_url(provider, str(cfg.get("ai_base_url") or ""))
     client_key = (key, base_url)
     if _CLIENT is not None and _CLIENT_KEY == client_key:
         return _CLIENT
@@ -68,10 +87,7 @@ def _chat_openai_compatible(system: str, user: str, cfg: dict | None = None) -> 
         client = get_client()
         model = _current_model()
     else:
-        key = str(cfg.get("ai_api_key") or "").strip()
-        provider = str(cfg.get("ai_provider") or "custom")
-        base_url = app_config.effective_base_url(provider, str(cfg.get("ai_base_url") or ""))
-        model = str(cfg.get("ai_model") or "").strip()
+        _, _provider, key, base_url, model = _resolve_request_config(cfg)
         if not key or not base_url or not model:
             return ""
         from openai import OpenAI
@@ -90,11 +106,7 @@ def _chat_openai_compatible(system: str, user: str, cfg: dict | None = None) -> 
 
 
 def _chat_gemini(system: str, user: str, cfg: dict | None = None) -> str:
-    cfg = cfg or app_config.load_config()
-    key = str(cfg.get("ai_api_key") or "").strip()
-    model = str(cfg.get("ai_model") or "").strip()
-    provider = str(cfg.get("ai_provider") or "gemini")
-    base_url = app_config.effective_base_url(provider, str(cfg.get("ai_base_url") or ""))
+    cfg, _provider, key, base_url, model = _resolve_request_config(cfg, provider_default="gemini")
     if not key or not model:
         return ""
     url = f"{base_url}/models/{model}:generateContent"
@@ -113,22 +125,22 @@ def _chat_gemini(system: str, user: str, cfg: dict | None = None) -> str:
 
 
 def _chat(system: str, user: str) -> str:
-    cfg = app_config.load_config()
+    cfg = _load_config_snapshot()
     if not app_config.is_ai_configured(cfg):
         return ""
-    if app_config.provider_kind(str(cfg.get("ai_provider") or "")) == "gemini":
+    if app_config.provider_kind(_config_text(cfg, "ai_provider")) == "gemini":
         return _chat_gemini(system, user)
     return _chat_openai_compatible(system, user)
 
 
 def test_connection(config: dict) -> tuple[bool, str]:
     """用表单配置发起一次最小请求，不保存配置。"""
-    config = dict(config or {})
-    provider = str(config.get("ai_provider") or "")
+    config = _load_config_snapshot(config)
+    provider = _config_text(config, "ai_provider")
     if app_config.provider_kind(provider) == "openai_compatible":
         config["ai_base_url"] = app_config.effective_base_url(
             provider,
-            str(config.get("ai_base_url") or ""),
+            _config_text(config, "ai_base_url"),
         )
     if not app_config.is_ai_configured(config):
         return False, "请先填写完整的服务商、模型和 API Key。"
@@ -164,9 +176,9 @@ def friendly_api_error(exc: BaseException) -> str:
 
 
 def fetch_models(config: dict) -> tuple[bool, list[str] | str]:
-    cfg = dict(config or {})
-    provider = str(cfg.get("ai_provider") or "")
-    key = str(cfg.get("ai_api_key") or "").strip()
+    cfg = _load_config_snapshot(config)
+    provider = _config_text(cfg, "ai_provider")
+    key = _config_text(cfg, "ai_api_key")
     if not key:
         return False, "请先填写 API Key。"
     if app_config.provider_kind(provider) == "gemini":
@@ -175,9 +187,7 @@ def fetch_models(config: dict) -> tuple[bool, list[str] | str]:
 
 
 def _fetch_openai_compatible_models(config: dict) -> tuple[bool, list[str] | str]:
-    provider = str(config.get("ai_provider") or "custom")
-    key = str(config.get("ai_api_key") or "").strip()
-    base_url = app_config.effective_base_url(provider, str(config.get("ai_base_url") or ""))
+    _, provider, key, base_url, _model = _resolve_request_config(config)
     if not base_url:
         return False, "请先填写 Base URL。"
     try:
@@ -196,8 +206,7 @@ def _fetch_openai_compatible_models(config: dict) -> tuple[bool, list[str] | str
 
 
 def _fetch_gemini_models(config: dict) -> tuple[bool, list[str] | str]:
-    key = str(config.get("ai_api_key") or "").strip()
-    base_url = app_config.effective_base_url("gemini", str(config.get("ai_base_url") or ""))
+    _, _provider, key, base_url, _model = _resolve_request_config(config, provider_default="gemini")
     try:
         resp = requests.get(
             base_url.rstrip("/") + "/models",
