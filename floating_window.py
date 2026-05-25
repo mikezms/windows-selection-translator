@@ -73,11 +73,19 @@ class FloatingWindow:
         else:
             self._render(original, translated, is_message=False)
 
-    def show_message(self, title: str, msg: str, duration_ms: int = 2800) -> None:
+    def show_message(self, title: str, msg: str, duration_ms: int = 2800, actions=None) -> None:
         """显示提示/错误消息：无按钮，自动消失。"""
-        self._render(title, msg, is_message=True, duration_ms=duration_ms)
+        self._render(title, msg, is_message=True, duration_ms=duration_ms, actions=actions)
 
-    def _render(self, original: str, translated: str, *, is_message: bool, duration_ms: int = 0) -> None:
+    def _render(
+        self,
+        original: str,
+        translated: str,
+        *,
+        is_message: bool,
+        duration_ms: int = 0,
+        actions=None,
+    ) -> None:
         self._original = original
         self._translated = translated
         original_view = _preview_text(original, SOURCE_PREVIEW_LENGTH)
@@ -137,8 +145,9 @@ class FloatingWindow:
         self.meaning_lbl.pack(fill="x", pady=(0, 16))
 
         if is_message:
+            self._build_message_actions(body, top, actions)
             self._finalize_placement(top)
-            if duration_ms > 0:
+            if duration_ms > 0 and not actions:
                 top.after(duration_ms, top.withdraw)
             return
 
@@ -166,7 +175,7 @@ class FloatingWindow:
             example_lbl.configure(text="⏳ 正在生成例句...", fg=UI_FLOAT_MUTED)
             example_lbl.pack(fill="x")
 
-        # 按钮行：左右各占 50%
+        # 按钮行
         btn_row = tk.Frame(body, bg=UI_FLOAT_BG)
         btn_row.pack(fill="x")
 
@@ -179,6 +188,16 @@ class FloatingWindow:
         )
         speak_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
         hover_bind(speak_btn, "#f1f5f9", "#e2e8f0", fg="#475569", hover_fg="#0f172a")
+
+        copy_btn = tk.Button(
+            btn_row, text="复制译文", command=lambda: self._copy_to_clipboard(self._translated, "译文", copy_btn),
+            relief="flat", bd=0, pady=8,
+            bg="#f1f5f9", fg="#475569",
+            activebackground="#e2e8f0", activeforeground="#0f172a",
+            font=tkfont.Font(family=FONT_FAMILY, size=10, weight="bold"), cursor="hand2",
+        )
+        copy_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        hover_bind(copy_btn, "#f1f5f9", "#e2e8f0", fg="#475569", hover_fg="#0f172a")
 
         btn = tk.Button(
             btn_row, text="＋ 收录", command=self._on_save_click,
@@ -201,6 +220,31 @@ class FloatingWindow:
         # 后台生成例句
         if need_gen:
             self._fetch_example_async(top, ex_frame, example_lbl, example_zh_lbl, original, translated)
+
+    def _build_message_actions(self, body: tk.Widget, top: tk.Toplevel, actions) -> None:
+        if not actions:
+            return
+        btn_row = tk.Frame(body, bg=UI_FLOAT_BG)
+        btn_row.pack(fill="x", pady=(0, 2))
+        for idx, (label, command) in enumerate(actions):
+            btn = tk.Button(
+                btn_row, text=label,
+                command=lambda cb=command: self._run_message_action(top, cb),
+                relief="flat", bd=0, pady=7,
+                bg=UI_FLOAT_BTN if idx == 0 else "#f1f5f9",
+                fg="#ffffff" if idx == 0 else "#475569",
+                activebackground=UI_FLOAT_BTN_H if idx == 0 else "#e2e8f0",
+                activeforeground="#ffffff" if idx == 0 else "#0f172a",
+                font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+                cursor="hand2",
+            )
+            btn.pack(side="left", fill="x", expand=True, padx=(0, 8 if idx + 1 < len(actions) else 0))
+
+    def _run_message_action(self, top: tk.Toplevel, command) -> None:
+        if top.winfo_exists():
+            top.withdraw()
+        if command:
+            command()
 
     def _render_article(self, original: str, translated: str) -> None:
         self._original = original
@@ -383,6 +427,23 @@ class FloatingWindow:
         text = (self._original or "").strip()
         if text and _is_likely_english(text):
             tts.speak_async(text)
+
+    def _copy_to_clipboard(self, text: str, label: str, button: tk.Button | None = None) -> None:
+        value = (text or "").strip()
+        if not value:
+            if button is not None:
+                button.configure(text="无内容")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(value)
+        if button is None:
+            return
+        old_text = str(button.cget("text"))
+        button.configure(text=f"已复制{label}")
+        self.root.after(
+            1200,
+            lambda: button.winfo_exists() and button.configure(text=old_text),
+        )
 
     def _on_save_click(self) -> None:
         word = (self._original or "").strip()
