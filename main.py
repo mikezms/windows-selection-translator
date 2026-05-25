@@ -72,9 +72,11 @@ class UnifiedApp:
         normalize_scores(self.vocab)
         self.sort_mode_var = tk.StringVar(value="最新添加")
         self.vocab_filter_var = tk.StringVar(value="全部")
+        self.history_search_var = tk.StringVar(value="")
         self._selected_vocab_index = 0
         self.vocab_rows = []
         self.vocab_filter_buttons = {}
+        self._history_items = []
         
         # 悬浮窗和快捷键
         self.floating = None
@@ -105,6 +107,7 @@ class UnifiedApp:
     def _append_log(self, original, result):
         ts = time.strftime("%H:%M:%S")
         item = {"timestamp": ts, "original": original, "translated": result}
+        self._history_items.insert(0, item)
         self._insert_history_item(item, at_top=True)
         
         # 存入文件
@@ -115,9 +118,11 @@ class UnifiedApp:
 
     def _clear_log(self):
         self._clear_history_view()
+        self._history_items = []
         
         import history_store
         history_store.save([])
+        self.status_var.set("历史记录已清空")
 
     def _do_translate_job(self):
         if not self._is_translate_enabled(): return
@@ -525,6 +530,26 @@ class UnifiedApp:
                               relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=9), cursor="hand2")
         btn_clear.pack(side="right")
 
+        search_row = tk.Frame(self.history_frame, bg=UI_BG)
+        search_row.pack(fill="x", pady=(0, 12))
+        tk.Label(
+            search_row, text="搜索", bg=UI_BG, fg=UI_TEXT_MUTED,
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+        ).pack(side="left", padx=(0, 8))
+        search_entry = tk.Entry(
+            search_row, textvariable=self.history_search_var,
+            bg="#ffffff", fg=UI_TEXT, insertbackground=UI_TEXT,
+            relief="solid", bd=1, highlightthickness=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=10),
+        )
+        search_entry.pack(side="left", fill="x", expand=True)
+        search_entry.bind("<KeyRelease>", lambda _e: self._filter_history())
+        tk.Button(
+            search_row, text="清除", command=self._clear_history_search,
+            bg=UI_BG, fg=UI_TEXT_MUTED, activebackground=UI_CHIP, activeforeground=UI_ACCENT,
+            relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=9), cursor="hand2",
+        ).pack(side="right", padx=(8, 0))
+
         card = tk.Frame(self.history_frame, bg=UI_CARD, highlightbackground=UI_BORDER, highlightthickness=1, padx=2, pady=2)
         card.pack(fill="both", expand=True)
         
@@ -598,8 +623,8 @@ class UnifiedApp:
 
         # 加载历史记录
         import history_store
-        hist_items = history_store.load()
-        self._render_history(hist_items)
+        self._history_items = history_store.load()
+        self._render_history(self._history_items)
 
     def _render_history(self, items):
         self._clear_history_view()
@@ -608,6 +633,35 @@ class UnifiedApp:
             self._write_history_item(item)
         self.history_text.configure(state="disabled")
         self.history_text.yview_moveto(0)
+
+    def _filter_history(self):
+        query = self.history_search_var.get().strip().lower()
+        if not query:
+            self._render_history(self._history_items)
+            return
+
+        filtered = []
+        for item in self._history_items:
+            original = str(item.get("original", ""))
+            translated = str(item.get("translated", ""))
+            timestamp = str(item.get("timestamp", ""))
+            if query in original.lower() or query in translated.lower() or query in timestamp.lower():
+                filtered.append(item)
+
+        if filtered:
+            self._render_history(filtered)
+            self.status_var.set(f"历史记录已筛选：{len(filtered)} 条")
+            return
+
+        self._clear_history_view()
+        self.history_text.configure(state="normal")
+        self.history_text.insert("1.0", "没有匹配的历史记录。\n", ("section",))
+        self.history_text.configure(state="disabled")
+        self.status_var.set("没有匹配的历史记录")
+
+    def _clear_history_search(self):
+        self.history_search_var.set("")
+        self._render_history(self._history_items)
 
     def _clear_history_view(self):
         self.history_text.configure(state="normal")
