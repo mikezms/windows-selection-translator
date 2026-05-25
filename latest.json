@@ -1,0 +1,10 @@
+{
+  "version": "1.0.9",
+  "download_url": "http://47.108.180.126/snaptranslate/SnapTranslateSetup-1.0.9.exe",
+  "sha256": "B5EACAA9494E5723DC1481268DE67BD32C47561C80A140B710568CDBD33A50A7",
+  "size": 47930428,
+  "notes": [
+    "修复更新后仍回到旧版本的问题",
+    "启动安装器时强制安装到当前程序目录"
+  ]
+}

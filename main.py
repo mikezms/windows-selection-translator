@@ -4,14 +4,18 @@ import threading
 import time
 import random
 import tkinter as tk
-from tkinter import font as tkfont, scrolledtext, messagebox
+from tkinter import font as tkfont, scrolledtext, messagebox, ttk
 
 import hotkey as hk
+import app_config
 import translator
 import deepseek
 import tts
+import updater
 import vocab_store
+from app_paths import VOCAB_PATH
 from floating_window import FloatingWindow
+from settings_dialog import ApiSettingsDialog
 from ui_theme import (
     FONT_FAMILY, UI_ACCENT, UI_ACCENT_DARK, UI_ACCENT_HOVER, UI_BG, UI_BG_ALT,
     UI_BORDER, UI_BORDER_SOFT, UI_CARD, UI_CHIP, UI_LOG_BG, UI_STATUS_BG,
@@ -24,15 +28,14 @@ from vocab_store import (
     needs_bilingual_example, normalize_scores
 )
 from vocab_review import GRADE_DELTA
+from version import APP_VERSION
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VOCAB_PATH = os.path.join(SCRIPT_DIR, "vocab.json")
-MAX_TEXT_LENGTH = 120
 
 class UnifiedApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("得意划词翻译")
+        self.root.title(f"得意划词翻译 {APP_VERSION}")
         self.root.geometry("860x640")
         self.root.minsize(700, 500)
         self.root.configure(bg=UI_BG)
@@ -41,7 +44,9 @@ class UnifiedApp:
         self.status_var = tk.StringVar(value="就绪")
         self.enable_var = tk.BooleanVar(value=True)
         self.floating_var = tk.BooleanVar(value=True)
-        self.translate_source_var = tk.StringVar(value="mymemory")
+        self.app_config = app_config.load_config()
+        self.translate_source_var = tk.StringVar(value=self.app_config.get("translate_source", "mymemory"))
+        self.hotkey_var = tk.StringVar(value=str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
         
         self._enabled_lock = threading.Lock()
         self._translate_enabled = True
@@ -50,14 +55,22 @@ class UnifiedApp:
         self.vocab = vocab_store.load(VOCAB_PATH)
         normalize_scores(self.vocab)
         self.sort_mode_var = tk.StringVar(value="最新添加")
+        self.vocab_filter_var = tk.StringVar(value="全部")
         self._selected_vocab_index = 0
         self.vocab_rows = []
+        self.vocab_filter_buttons = {}
         
         # 悬浮窗和快捷键
         self.floating = None
-        self.hotkey_listener = hk.HotkeyListener(on_hotkey=self._do_translate_job)
+        self.hotkey_listener = hk.HotkeyListener(on_hotkey=self._do_translate_job, hotkey=self.hotkey_var.get())
+        self._update_progress_win = None
+        self._update_progress_label_var = tk.StringVar(value="")
+        self._update_progress_percent_var = tk.DoubleVar(value=0.0)
+        self._update_progress_bar = None
+        self._update_cancel_event = threading.Event()
 
         self._build_ui()
+        self._refresh_saved_model_switch_menu()
         self._load_vocab_list()
 
     # ---- 翻译业务逻辑 ----
@@ -69,7 +82,7 @@ class UnifiedApp:
         with self._enabled_lock:
             self._translate_enabled = bool(self.enable_var.get())
         if self._translate_enabled:
-            self.status_var.set("已开启 — 划词后按 Alt + T 即可翻译")
+            self.status_var.set(f"已开启 — 划词后按 {self.hotkey_var.get()} 即可翻译")
         else:
             self.status_var.set("已暂停 — 不会响应快捷键")
 
@@ -94,9 +107,9 @@ class UnifiedApp:
         if not self._is_translate_enabled(): return
         text = hk.copy_selected_text()
         if not text:
-            self.root.after(0, lambda: self._show_error("提示", "未检测到选中文本，请先划词再按 Alt + T"))
+            self.root.after(0, lambda: self._show_error("提示", f"未检测到选中文本，请先划词再按 {self.hotkey_var.get()}"))
             return
-        if len(text) > MAX_TEXT_LENGTH: text = text[:MAX_TEXT_LENGTH] + "..."
+        text = text.strip()
         try:
             src = self.translate_source_var.get()
             translated = translator.translate(text, src)
@@ -173,9 +186,260 @@ class UnifiedApp:
         
         rb_kw = dict(bg=UI_CARD, activebackground=UI_CARD, fg=UI_TEXT_SOFT, selectcolor=UI_CHIP,
                      font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
-        tk.Radiobutton(settings, text="通用快速翻译", variable=self.translate_source_var, value="mymemory", **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="Google 翻译", variable=self.translate_source_var, value="google", **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="AI 技术语境翻译", variable=self.translate_source_var, value="deepseek", **rb_kw).pack(anchor="w")
+        tk.Radiobutton(settings, text="通用快速翻译", variable=self.translate_source_var, value="mymemory", command=self._on_translate_source_change, **rb_kw).pack(anchor="w")
+        tk.Radiobutton(settings, text="Google 翻译", variable=self.translate_source_var, value="google", command=self._on_translate_source_change, **rb_kw).pack(anchor="w")
+        tk.Radiobutton(settings, text="AI 技术语境翻译", variable=self.translate_source_var, value="deepseek", command=self._on_translate_source_change, **rb_kw).pack(anchor="w")
+
+        tk.Button(
+            settings, text="API 设置", command=self._open_api_settings,
+            bg=UI_CHIP, fg=UI_ACCENT, activebackground=UI_ACCENT,
+            activeforeground="#ffffff", relief="flat", bd=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+            cursor="hand2", pady=6,
+        ).pack(fill="x", pady=(10, 0))
+
+        model_row = tk.Frame(settings, bg=UI_CARD)
+        model_row.pack(fill="x", pady=(10, 0))
+        tk.Label(model_row, text="历史模型", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
+        self.saved_model_switch_var = tk.StringVar(value="")
+        self.saved_model_switch_menu = tk.OptionMenu(model_row, self.saved_model_switch_var, "")
+        self.saved_model_switch_menu.configure(
+            bg=UI_CHIP, fg=UI_ACCENT, activebackground=UI_ACCENT,
+            activeforeground="#ffffff", relief="flat", bd=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+            width=18,
+        )
+        self.saved_model_switch_menu.pack(fill="x", pady=(4, 0))
+        tk.Button(
+            model_row, text="切换模型", command=self._switch_saved_model,
+            bg=UI_CARD, fg=UI_ACCENT, activebackground=UI_CHIP,
+            activeforeground=UI_ACCENT, relief="flat", bd=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+            cursor="hand2", pady=4,
+        ).pack(fill="x", pady=(6, 0))
+
+        hotkey_row = tk.Frame(settings, bg=UI_CARD)
+        hotkey_row.pack(fill="x", pady=(10, 0))
+        tk.Label(hotkey_row, text="快捷键", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
+        tk.Entry(
+            hotkey_row, textvariable=self.hotkey_var, width=16,
+            bg="#ffffff", fg=UI_TEXT, insertbackground=UI_TEXT,
+            relief="solid", bd=1, highlightthickness=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=9),
+        ).pack(fill="x", pady=(4, 0))
+        tk.Button(
+            hotkey_row, text="应用快捷键", command=self._apply_hotkey_setting,
+            bg=UI_CARD, fg=UI_ACCENT, activebackground=UI_CHIP,
+            activeforeground=UI_ACCENT, relief="flat", bd=0,
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+            cursor="hand2", pady=4,
+        ).pack(fill="x", pady=(6, 0))
+
+    def _on_translate_source_change(self):
+        self.app_config = app_config.load_config()
+        self.app_config["translate_source"] = self.translate_source_var.get()
+        app_config.save_config(self.app_config)
+
+    def _open_api_settings(self):
+        dialog = ApiSettingsDialog(self.root, first_run=False)
+        if dialog.result:
+            self.app_config = app_config.load_config()
+            deepseek.reset_client_cache()
+            self._refresh_saved_model_switch_menu()
+            self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
+            self._apply_hotkey_setting()
+            self.status_var.set(f"已保存 API 设置：{app_config.provider_label(self.app_config.get('ai_provider', 'deepseek'))}")
+
+    def _saved_model_label(self, item):
+        provider = str(item.get("provider") or "custom")
+        base_url = str(item.get("base_url") or "").strip()
+        model = str(item.get("model") or "").strip()
+        if not model:
+            return ""
+        label = model if not base_url else f"{model} @ {base_url}"
+        return f"{provider}: {label}" if provider != "custom" else label
+
+    def _refresh_saved_model_switch_menu(self):
+        self.app_config = app_config.load_config()
+        models = list(self.app_config.get("ai_models") or [])
+        labels = [self._saved_model_label(item) for item in models if self._saved_model_label(item)]
+        menu = self.saved_model_switch_menu["menu"]
+        menu.delete(0, "end")
+        if not labels:
+            labels = ["暂无历史模型"]
+        for label in labels:
+            menu.add_command(label=label, command=lambda v=label: self.saved_model_switch_var.set(v))
+        self.saved_model_switch_var.set(labels[0])
+
+    def _switch_saved_model(self):
+        selected = self.saved_model_switch_var.get()
+        self.app_config = app_config.load_config()
+        for item in list(self.app_config.get("ai_models") or []):
+            if self._saved_model_label(item) == selected:
+                self.app_config["ai_provider"] = str(item.get("provider") or "custom")
+                self.app_config["ai_base_url"] = str(item.get("base_url") or "")
+                self.app_config["ai_model"] = str(item.get("model") or "")
+                app_config.save_config(self.app_config)
+                self.translate_source_var.set(self.app_config.get("translate_source", self.translate_source_var.get()))
+                self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
+                self._apply_hotkey_setting()
+                self.status_var.set(f"已切换模型：{self.app_config['ai_model']}")
+                return
+        self.status_var.set("没有可切换的历史模型")
+
+    def _ensure_api_settings(self):
+        if not app_config.needs_first_run_setup():
+            return
+        dialog = ApiSettingsDialog(self.root, first_run=True)
+        if dialog.result and app_config.is_ai_configured():
+            self.app_config = app_config.load_config()
+            deepseek.reset_client_cache()
+            self._refresh_saved_model_switch_menu()
+            self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
+            self._apply_hotkey_setting()
+            self.status_var.set("API 设置已保存，可以开始使用")
+            return
+        messagebox.showwarning("需要 API Key", "请先完成 API 设置后再使用得意翻译。")
+        self.root.after(0, self._on_close)
+
+    def _check_for_updates_async(self):
+        def _worker():
+            try:
+                update = updater.check_update()
+            except Exception:
+                return
+            if update and self.root.winfo_exists():
+                self.root.after(0, lambda u=update: self._show_update_prompt(u))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _show_update_prompt(self, update):
+        version = update.version
+        notes = update.notes.strip()
+        msg = f"发现新版本：{version}\n当前版本：{APP_VERSION}"
+        if notes:
+            msg += f"\n\n更新内容：\n{notes}"
+        msg += "\n\n是否立即在应用内下载并更新？"
+        if messagebox.askyesno("发现新版本", msg):
+            self._start_update_download(update)
+
+    def _apply_hotkey_setting(self):
+        hotkey = app_config.normalize_hotkey(self.hotkey_var.get())
+        self.hotkey_var.set(hotkey)
+        self.app_config = app_config.load_config()
+        self.app_config["hotkey"] = hotkey
+        app_config.save_config(self.app_config)
+        if hasattr(self, "hotkey_listener") and self.hotkey_listener:
+            self.hotkey_listener.stop()
+            self.hotkey_listener = hk.HotkeyListener(on_hotkey=self._do_translate_job, hotkey=hotkey)
+            self.hotkey_listener.start(on_register_fail=lambda: self.root.after(0, lambda: self.status_var.set(f"错误：快捷键 {hotkey} 注册失败，可能被占用")))
+            self.status_var.set(f"快捷键已更新为 {hotkey}")
+
+    def _start_update_download(self, update):
+        if self._update_progress_win and self._update_progress_win.winfo_exists():
+            self._update_progress_win.lift()
+            return
+
+        self._update_cancel_event.clear()
+        self._update_progress_percent_var.set(0.0)
+        self._update_progress_label_var.set("准备下载更新...")
+
+        win = tk.Toplevel(self.root)
+        win.title("下载更新")
+        win.geometry("420x170")
+        win.resizable(False, False)
+        win.configure(bg=UI_BG)
+        win.transient(self.root)
+        win.protocol("WM_DELETE_WINDOW", self._cancel_update_download)
+        self._update_progress_win = win
+
+        body = tk.Frame(win, bg=UI_BG, padx=20, pady=18)
+        body.pack(fill="both", expand=True)
+
+        tk.Label(
+            body, text=f"正在下载 SnapTranslate {update.version}",
+            bg=UI_BG, fg=UI_TEXT,
+            font=tkfont.Font(family=FONT_FAMILY, size=11, weight="bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            body, textvariable=self._update_progress_label_var,
+            bg=UI_BG, fg=UI_TEXT_MUTED,
+            font=tkfont.Font(family=FONT_FAMILY, size=9),
+        ).pack(anchor="w", pady=(8, 10))
+
+        self._update_progress_bar = ttk.Progressbar(
+            body, variable=self._update_progress_percent_var, maximum=100, mode="determinate"
+        )
+        self._update_progress_bar.pack(fill="x")
+
+        tk.Button(
+            body, text="取消下载", command=self._cancel_update_download,
+            bg=UI_BG_ALT, fg=UI_TEXT_SOFT, activebackground=UI_CHIP, activeforeground=UI_ACCENT,
+            relief="flat", bd=0, cursor="hand2", padx=14, pady=6,
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+        ).pack(anchor="e", pady=(16, 0))
+
+        def _progress(downloaded, total):
+            if self.root.winfo_exists():
+                self.root.after(0, lambda d=downloaded, t=total: self._on_update_download_progress(d, t))
+
+        def _worker():
+            try:
+                local_path = updater.download_update(update, _progress, self._update_cancel_event)
+            except Exception as exc:
+                if self.root.winfo_exists():
+                    self.root.after(0, lambda e=exc: self._finish_update_download_error(e))
+                return
+            if self.root.winfo_exists():
+                self.root.after(0, lambda p=local_path: self._finish_update_download_success(p))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_update_download_progress(self, downloaded, total):
+        if total:
+            percent = min(100.0, downloaded * 100.0 / total)
+            self._update_progress_percent_var.set(percent)
+            self._update_progress_label_var.set(
+                f"已下载 {self._format_bytes(downloaded)} / {self._format_bytes(total)}"
+            )
+        else:
+            self._update_progress_label_var.set(f"已下载 {self._format_bytes(downloaded)}")
+
+    def _finish_update_download_error(self, exc):
+        self._destroy_update_progress_win()
+        if self._update_cancel_event.is_set():
+            self.status_var.set("已取消更新下载")
+            return
+        messagebox.showerror("更新失败", f"更新包下载失败：\n{exc}")
+
+    def _finish_update_download_success(self, local_path):
+        self._destroy_update_progress_win()
+        self.status_var.set("更新包已下载完成")
+        if messagebox.askyesno("下载完成", "更新包已下载完成。\n\n是否关闭当前应用并开始安装？"):
+            try:
+                updater.launch_installer(local_path)
+            except Exception as exc:
+                messagebox.showerror("启动安装失败", f"无法启动安装包：\n{exc}")
+                return
+            self._on_close()
+
+    def _cancel_update_download(self):
+        self._update_cancel_event.set()
+        self._update_progress_label_var.set("正在取消下载...")
+
+    def _destroy_update_progress_win(self):
+        if self._update_progress_win and self._update_progress_win.winfo_exists():
+            self._update_progress_win.destroy()
+        self._update_progress_win = None
+        self._update_progress_bar = None
+
+    @staticmethod
+    def _format_bytes(size):
+        size = float(size or 0)
+        for unit in ("B", "KB", "MB", "GB"):
+            if size < 1024 or unit == "GB":
+                return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+            size /= 1024
 
     def _switch_tab(self, tab_id):
         # 更新按钮样式
@@ -362,6 +626,23 @@ class UnifiedApp:
         sort_menu["menu"].configure(bg=UI_CARD, fg=UI_TEXT_SOFT, activebackground=UI_CHIP, activeforeground=UI_ACCENT)
         sort_menu.pack(fill="x")
 
+        filter_fr = tk.Frame(left_top, bg=UI_CARD)
+        filter_fr.pack(fill="x", pady=(8, 0))
+        self.vocab_filter_buttons = {}
+        for kind in ("全部", "单词", "短语", "句子"):
+            btn = tk.Button(
+                filter_fr, text=kind,
+                command=lambda k=kind: self._set_vocab_filter(k),
+                relief="flat", bd=0, padx=0, pady=5,
+                font=tkfont.Font(family=FONT_FAMILY, size=8, weight="bold"),
+                cursor="hand2",
+            )
+            btn.pack(side="left", fill="x", expand=True, padx=(0, 4 if kind != "句子" else 0))
+            btn.bind("<Enter>", lambda _e, b=btn, k=kind: self._on_vocab_filter_hover(b, k, True))
+            btn.bind("<Leave>", lambda _e, b=btn, k=kind: self._on_vocab_filter_hover(b, k, False))
+            self.vocab_filter_buttons[kind] = btn
+        self._refresh_vocab_filter_buttons()
+
         list_frame = tk.Frame(left_fr, bg=UI_CARD)
         list_frame.pack(fill="both", expand=True)
         self.vocab_canvas = tk.Canvas(
@@ -492,6 +773,31 @@ class UnifiedApp:
 
     def _on_vocab_mousewheel(self, event):
         self.vocab_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _set_vocab_filter(self, kind):
+        if kind == self.vocab_filter_var.get():
+            return
+        self.vocab_filter_var.set(kind)
+        self._selected_vocab_index = 0
+        self._refresh_vocab_filter_buttons()
+        self._load_vocab_list()
+
+    def _on_vocab_filter_hover(self, btn, kind, entering):
+        selected = kind == self.vocab_filter_var.get()
+        if selected:
+            return
+        btn.configure(bg=UI_CHIP if entering else UI_BG_ALT, fg=UI_ACCENT if entering else UI_TEXT_MUTED)
+
+    def _refresh_vocab_filter_buttons(self):
+        current = self.vocab_filter_var.get()
+        for kind, btn in getattr(self, "vocab_filter_buttons", {}).items():
+            selected = kind == current
+            btn.configure(
+                bg=UI_ACCENT if selected else UI_BG_ALT,
+                fg="#ffffff" if selected else UI_TEXT_MUTED,
+                activebackground=UI_ACCENT_HOVER if selected else UI_CHIP,
+                activeforeground="#ffffff" if selected else UI_ACCENT,
+            )
 
     @staticmethod
     def _entry_kind(text):
@@ -629,6 +935,13 @@ class UnifiedApp:
             self.display_list.sort(key=lambda x: -item_score(x))
         elif mode == "A-Z":
             self.display_list.sort(key=lambda x: str(x.get("word","")).lower())
+
+        selected_filter = self.vocab_filter_var.get()
+        if selected_filter != "全部":
+            self.display_list = [
+                it for it in self.display_list
+                if self._entry_kind(str(it.get("word", ""))) == selected_filter
+            ]
             
         for child in self.vocab_list_inner.winfo_children():
             child.destroy()
@@ -702,8 +1015,9 @@ class UnifiedApp:
     def _gen_example_current(self):
         it = self._current_vocab()
         if not it: return
-        if deepseek.get_client() is None:
-            messagebox.showwarning("提示", "请先在 api_key.txt 中填写 DeepSeek API Key。")
+        if not app_config.is_ai_configured():
+            messagebox.showwarning("提示", "请先在 API 设置中填写服务商、模型和 API Key。")
+            self._open_api_settings()
             return
             
         self.btn_gen.configure(state="disabled", text="生成中...")
@@ -754,6 +1068,8 @@ class UnifiedApp:
 
     # ---- 生命周期 ----
     def _on_close(self):
+        self._update_cancel_event.set()
+        self._destroy_update_progress_win()
         self.hotkey_listener.stop()
         self.root.destroy()
 
@@ -761,10 +1077,12 @@ class UnifiedApp:
         self.floating = FloatingWindow(self.root, VOCAB_PATH)
 
         def _on_hotkey_fail():
-            self.root.after(0, lambda: self.status_var.set("错误：Ctrl + L 注册失败，可能被占用"))
+            self.root.after(0, lambda: self.status_var.set(f"错误：快捷键 {self.hotkey_var.get()} 注册失败，可能被占用"))
 
         self.hotkey_listener.start(on_register_fail=_on_hotkey_fail)
-        self.status_var.set("已开启 — 划词后按 Ctrl + L 即可翻译")
+        self.status_var.set(f"已开启 — 划词后按 {self.hotkey_var.get()} 即可翻译")
+        self.root.after(150, self._ensure_api_settings)
+        self.root.after(1200, self._check_for_updates_async)
         self.root.mainloop()
 
 if __name__ == "__main__":

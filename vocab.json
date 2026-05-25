@@ -142,5 +142,61 @@
     "example_zh": "",
     "score": 50.0,
     "reviews": 0
+  },
+  {
+    "word": "Fork in new pane",
+    "meaning": "v. 在新窗格中创建分叉（克隆独立副本以并行操作或实验）",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
+  },
+  {
+    "word": "RAG",
+    "meaning": "n. RAG（检索增强生成），一种结合信息检索与大语言模型生成能力的技术框架",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
+  },
+  {
+    "word": "Retrieval-Augmented Generation",
+    "meaning": "n. 检索增强生成",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
+  },
+  {
+    "word": "Retrieval",
+    "meaning": "n. 检索，数据或信息的取回过程",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
+  },
+  {
+    "word": "Augmented",
+    "meaning": "adj. 增强的，增强型的",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
+  },
+  {
+    "word": "snippets",
+    "meaning": "n. 片段；代码片段",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
+  },
+  {
+    "word": "Before you ship.",
+    "meaning": "phrase. 在交付/发布之前（工程与产品开发术语，指在正式上线或部署前完成充分验证）",
+    "example": "",
+    "example_zh": "",
+    "score": 50.0,
+    "reviews": 0
   }
 ]

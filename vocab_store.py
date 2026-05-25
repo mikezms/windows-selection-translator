@@ -2,8 +2,9 @@
 import json
 import os
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_VOCAB_PATH = os.path.join(SCRIPT_DIR, "vocab.json")
+from app_paths import VOCAB_PATH
+
+DEFAULT_VOCAB_PATH = VOCAB_PATH
 
 DEFAULT_SCORE = 50.0
 SCORE_MIN = 0.0

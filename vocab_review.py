@@ -12,6 +12,7 @@ import time
 import tkinter as tk
 from tkinter import font as tkfont, messagebox
 
+import app_config
 import deepseek
 import tts
 import vocab_store
@@ -465,8 +466,8 @@ class VocabReviewApp:
     def _start_generate_examples(self) -> None:
         if self._gen_running:
             return
-        if deepseek.get_client() is None:
-            messagebox.showwarning("提示", "请先在 api_key.txt 中填写 DeepSeek API Key。")
+        if not app_config.is_ai_configured():
+            messagebox.showwarning("提示", "请先在主程序的 API 设置中填写服务商、模型和 API Key。")
             return
         pending = [(i, it) for i, it in enumerate(self.vocab) if needs_bilingual_example(it)]
         if not pending:

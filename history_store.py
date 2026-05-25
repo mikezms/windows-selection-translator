@@ -2,8 +2,9 @@
 import json
 import os
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_HISTORY_PATH = os.path.join(SCRIPT_DIR, "history.json")
+from app_paths import HISTORY_PATH
+
+DEFAULT_HISTORY_PATH = HISTORY_PATH
 
 def load(path: str = DEFAULT_HISTORY_PATH) -> list[dict]:
     try:

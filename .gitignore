@@ -12,3 +12,9 @@ venv/
 # python cache
 __pycache__/
 *.pyc
+
+# build output
+build/
+dist/
+installer/
+*.spec.bak
