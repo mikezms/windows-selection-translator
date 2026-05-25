@@ -32,6 +32,22 @@ from version import APP_VERSION
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+TRANSLATION_STATUS_PREFIX = "正在翻译"
+
+
+def _friendly_translate_failure(exc: BaseException) -> str:
+    text = str(exc)
+    lower = text.lower()
+    if isinstance(exc, (translator.requests.exceptions.Timeout, translator.requests.exceptions.ConnectionError)):
+        return "网络连接失败，请检查代理或网络状态。"
+    if "api key" in lower or "authentication" in lower or "unauthorized" in lower:
+        return "AI 配置无效，请检查 API Key。"
+    if "model" in lower and ("not found" in lower or "unknown" in lower):
+        return "模型名称不正确，请到 API 设置中检查模型。"
+    if "quota" in lower or "balance" in lower:
+        return "额度不足，请更换 Key 或补充余额。"
+    return f"翻译失败：{text}"
+
 class UnifiedApp:
     def __init__(self):
         self.root = tk.Tk()
@@ -110,22 +126,57 @@ class UnifiedApp:
             self.root.after(0, lambda: self._show_error("提示", f"未检测到选中文本，请先划词再按 {self.hotkey_var.get()}"))
             return
         text = text.strip()
+        src = self.translate_source_var.get()
+        if src == "deepseek" and not app_config.is_ai_configured():
+            self.root.after(
+                0,
+                lambda: self._show_error(
+                    "AI 翻译未配置",
+                    "请先填写服务商、模型和 API Key，再使用 AI 技术语境翻译。",
+                    actions=[("打开 API 设置", self._open_api_settings)],
+                ),
+            )
+            return
+        self.root.after(0, lambda t=text, s=src: self._show_translating(t, s))
         try:
-            src = self.translate_source_var.get()
             translated = translator.translate(text, src)
             self.root.after(0, lambda t=text, tr=translated: self._show_result(t, tr))
         except Exception as exc:
-            self.root.after(0, lambda t=text, e=exc: self._show_error(t, f"翻译失败: {e}"))
+            self.root.after(0, lambda t=text, s=src, e=exc: self._show_error(t, _friendly_translate_failure(e), actions=self._translate_error_actions(s)))
+
+    def _show_translating(self, original, source):
+        label = {
+            "mymemory": "通用快速翻译",
+            "google": "Google 翻译",
+            "deepseek": "AI 技术语境翻译",
+        }.get(source, "翻译")
+        self.status_var.set(f"{TRANSLATION_STATUS_PREFIX}：{label}...")
+        if self.floating and self.floating_var.get():
+            self.floating.show_message("正在翻译", f"{label}处理中，请稍候。", duration_ms=0)
 
     def _show_result(self, original, translated):
         self._append_log(original, translated)
+        self.status_var.set(f"翻译完成 — 划词后按 {self.hotkey_var.get()} 可继续翻译")
         if self.floating and self.floating_var.get():
             self.floating.show_translation(original, translated)
 
-    def _show_error(self, title, msg):
+    def _translate_error_actions(self, source):
+        if source == "deepseek":
+            return [("打开 API 设置", self._open_api_settings), ("改用快速翻译", self._use_quick_translate)]
+        if source == "google":
+            return [("改用快速翻译", self._use_quick_translate)]
+        return None
+
+    def _use_quick_translate(self):
+        self.translate_source_var.set("mymemory")
+        self._on_translate_source_change()
+        self.status_var.set("已切换到通用快速翻译")
+
+    def _show_error(self, title, msg, actions=None):
         self._append_log(title, msg)
+        self.status_var.set(msg)
         if self.floating and self.floating_var.get():
-            self.floating.show_message(title, msg, duration_ms=2800)
+            self.floating.show_message(title, msg, duration_ms=2800, actions=actions)
 
     # ---- 界面构建 (Dashboard UX) ----
     def _build_ui(self):
