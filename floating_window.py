@@ -65,6 +65,7 @@ class FloatingWindow:
         self._original = ""
         self._translated = ""
         self._last_pos: tuple[int, int] | None = None
+        self._pinned = False
 
     def show_translation(self, original: str, translated: str) -> None:
         """显示翻译结果卡片：含例句 + 按钮。"""
@@ -116,9 +117,22 @@ class FloatingWindow:
         body = tk.Frame(top, bg=UI_FLOAT_BG, padx=16, pady=14)
         body.pack(fill="both", expand=True)
 
-        # 关闭按钮
+        # 窗口操作
         close_row = tk.Frame(body, bg=UI_FLOAT_BG)
         close_row.pack(fill="x")
+        pin_btn = tk.Button(
+            close_row, text="固定" if not self._pinned else "已固定",
+            command=lambda: self._toggle_pin(top, pin_btn),
+            relief="flat", bd=0, padx=8, pady=0,
+            bg=UI_FLOAT_BTN if self._pinned else UI_FLOAT_BG,
+            fg="#ffffff" if self._pinned else UI_FLOAT_MUTED,
+            activebackground=UI_FLOAT_BTN_H if self._pinned else UI_FLOAT_BG_SOFT,
+            activeforeground="#ffffff",
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"), cursor="hand2",
+        )
+        pin_btn.pack(side="right", padx=(0, 6))
+        if not self._pinned:
+            hover_bind(pin_btn, UI_FLOAT_BG, UI_FLOAT_BG_SOFT, fg=UI_FLOAT_MUTED, hover_fg="#ffffff")
         close_btn = tk.Button(
             close_row, text="✕", command=lambda: top.withdraw(),
             relief="flat", bd=0, padx=8, pady=0,
@@ -178,6 +192,16 @@ class FloatingWindow:
         # 按钮行
         btn_row = tk.Frame(body, bg=UI_FLOAT_BG)
         btn_row.pack(fill="x")
+
+        copy_original_btn = tk.Button(
+            btn_row, text="复制原文", command=lambda: self._copy_to_clipboard(self._original, "原文", copy_original_btn),
+            relief="flat", bd=0, pady=8,
+            bg="#f1f5f9", fg="#475569",
+            activebackground="#e2e8f0", activeforeground="#0f172a",
+            font=tkfont.Font(family=FONT_FAMILY, size=10, weight="bold"), cursor="hand2",
+        )
+        copy_original_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        hover_bind(copy_original_btn, "#f1f5f9", "#e2e8f0", fg="#475569", hover_fg="#0f172a")
 
         speak_btn = tk.Button(
             btn_row, text="♪ 发音", command=self._on_speak_click,
@@ -245,6 +269,18 @@ class FloatingWindow:
             top.withdraw()
         if command:
             command()
+
+    def _toggle_pin(self, top: tk.Toplevel, button: tk.Button) -> None:
+        self._pinned = not self._pinned
+        if top.winfo_exists():
+            self._last_pos = (top.winfo_x(), top.winfo_y())
+            top.attributes("-topmost", self._pinned)
+        button.configure(
+            text="已固定" if self._pinned else "固定",
+            bg=UI_FLOAT_BTN if self._pinned else UI_FLOAT_BG,
+            fg="#ffffff" if self._pinned else UI_FLOAT_MUTED,
+            activebackground=UI_FLOAT_BTN_H if self._pinned else UI_FLOAT_BG_SOFT,
+        )
 
     def _render_article(self, original: str, translated: str) -> None:
         self._original = original
