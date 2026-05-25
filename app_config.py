@@ -74,6 +74,42 @@ DEFAULT_CONFIG = {
 }
 
 
+def _normalize_model_history_item(item) -> dict[str, str] | None:
+    if isinstance(item, dict):
+        provider = str(item.get("provider") or "custom").strip() or "custom"
+        base_url = str(item.get("base_url") or "").strip()
+        model = str(item.get("model") or "").strip()
+        if not model:
+            return None
+        if provider_kind(provider) == "openai_compatible":
+            base_url = normalize_openai_base_url(base_url, provider)
+        return {"provider": provider, "base_url": base_url, "model": model}
+
+    text = str(item).strip()
+    if not text:
+        return None
+    return {"provider": "custom", "base_url": "", "model": text}
+
+
+def _normalize_model_history_list(models) -> list[dict[str, str]]:
+    if not isinstance(models, list):
+        return []
+    cleaned = []
+    for item in models:
+        normalized = _normalize_model_history_item(item)
+        if normalized:
+            cleaned.append(normalized)
+    return cleaned
+
+
+def _model_history_key(item: dict[str, str]) -> tuple[str, str, str]:
+    return (
+        str(item.get("provider") or ""),
+        str(item.get("base_url") or ""),
+        str(item.get("model") or ""),
+    )
+
+
 def _legacy_api_key() -> str:
     path = os.path.join(SCRIPT_DIR, "api_key.txt")
     try:
@@ -104,27 +140,7 @@ def load_config() -> dict:
         data["ai_model"] = data.get("ai_model") or preset["model"]
     if not data.get("ai_api_key"):
         data["ai_api_key"] = _legacy_api_key()
-    models = data.get("ai_models")
-    if not isinstance(models, list):
-        data["ai_models"] = []
-    else:
-        cleaned = []
-        for item in models:
-            if isinstance(item, dict):
-                provider = str(item.get("provider") or "custom").strip() or "custom"
-                base_url = str(item.get("base_url") or "").strip()
-                model = str(item.get("model") or "").strip()
-                if model:
-                    cleaned.append({
-                        "provider": provider,
-                        "base_url": normalize_openai_base_url(base_url, provider) if provider_kind(provider) == "openai_compatible" else base_url,
-                        "model": model,
-                    })
-            else:
-                text = str(item).strip()
-                if text:
-                    cleaned.append({"provider": "custom", "base_url": "", "model": text})
-        data["ai_models"] = cleaned
+    data["ai_models"] = _normalize_model_history_list(data.get("ai_models"))
     hotkey = str(data.get("hotkey") or DEFAULT_HOTKEY).strip().lower()
     data["hotkey"] = hotkey or DEFAULT_HOTKEY
     return data
@@ -132,7 +148,10 @@ def load_config() -> dict:
 
 def save_config(config: dict) -> None:
     data = DEFAULT_CONFIG.copy()
-    data.update(config)
+    if isinstance(config, dict):
+        data.update(config)
+    data["ai_models"] = _normalize_model_history_list(data.get("ai_models"))
+    data["hotkey"] = normalize_hotkey(data.get("hotkey") or DEFAULT_HOTKEY)
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -222,31 +241,16 @@ def normalize_hotkey(value: str) -> str:
 
 def append_model_history(config: dict, provider: str, base_url: str, model: str) -> dict:
     data = dict(config or {})
-    raw_models = list(data.get("ai_models") or [])
-    models = []
-    for item in raw_models:
-        if isinstance(item, dict):
-            models.append({
-                "provider": str(item.get("provider") or "custom").strip() or "custom",
-                "base_url": str(item.get("base_url") or "").strip(),
-                "model": str(item.get("model") or "").strip(),
-            })
-        else:
-            text = str(item).strip()
-            if text:
-                models.append({"provider": "custom", "base_url": "", "model": text})
-    item = {
+    models = _normalize_model_history_list(data.get("ai_models"))
+    item = _normalize_model_history_item({
         "provider": provider,
-        "base_url": normalize_openai_base_url(base_url, provider) if provider_kind(provider) == "openai_compatible" else str(base_url or "").strip(),
-        "model": str(model or "").strip(),
-    }
-    if not item["model"]:
+        "base_url": base_url,
+        "model": model,
+    })
+    if not item:
         return data
-    models = [m for m in models if not (
-        str(m.get("provider") or "") == item["provider"]
-        and str(m.get("base_url") or "") == item["base_url"]
-        and str(m.get("model") or "") == item["model"]
-    )]
+    item_key = _model_history_key(item)
+    models = [m for m in models if _model_history_key(m) != item_key]
     models.insert(0, item)
     data["ai_models"] = models[:10]
     return data
