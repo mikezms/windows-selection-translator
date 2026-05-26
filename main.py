@@ -13,9 +13,10 @@ import deepseek
 import tts
 import updater
 import vocab_store
-from app_paths import VOCAB_PATH
+from app_paths import VOCAB_PATH, resource_path
 from floating_window import FloatingWindow
 from settings_dialog import ApiSettingsDialog
+from tray_icon import WindowsTrayIcon
 from ui_theme import (
     FONT_FAMILY, UI_ACCENT, UI_ACCENT_DARK, UI_ACCENT_HOVER, UI_BG, UI_BG_ALT,
     UI_BORDER, UI_BORDER_SOFT, UI_CARD, UI_CHIP, UI_LOG_BG, UI_STATUS_BG,
@@ -86,6 +87,8 @@ class UnifiedApp:
         self._update_progress_percent_var = tk.DoubleVar(value=0.0)
         self._update_progress_bar = None
         self._update_cancel_event = threading.Event()
+        self._tray_icon = None
+        self._is_quitting = False
 
         self._build_ui()
         self._refresh_saved_model_switch_menu()
@@ -176,6 +179,14 @@ class UnifiedApp:
         self.translate_source_var.set("mymemory")
         self._on_translate_source_change()
         self.status_var.set("已切换到通用快速翻译")
+
+    def _set_translate_source(self, source):
+        self.root.after(0, lambda s=source: self._apply_translate_source_from_tray(s))
+
+    def _apply_translate_source_from_tray(self, source):
+        self.translate_source_var.set(source)
+        self._on_translate_source_change()
+        self.status_var.set("已从托盘切换翻译方式")
 
     def _show_error(self, title, msg, actions=None):
         self._append_log(title, msg)
@@ -1173,10 +1184,58 @@ class UnifiedApp:
 
     # ---- 生命周期 ----
     def _on_close(self):
+        if not self._is_quitting and self._tray_icon:
+            self.root.withdraw()
+            self.status_var.set("已最小化到系统托盘")
+            return
         self._update_cancel_event.set()
         self._destroy_update_progress_win()
+        if self._tray_icon:
+            tray = self._tray_icon
+            self._tray_icon = None
+            tray.stop()
         self.hotkey_listener.stop()
         self.root.destroy()
+
+    def _show_main_window(self):
+        self.root.after(0, self._restore_main_window)
+
+    def _restore_main_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _toggle_enable_var(self):
+        self.enable_var.set(not bool(self.enable_var.get()))
+        self._on_enable_toggle()
+
+    def _open_settings_from_tray(self):
+        self.root.after(0, self._open_api_settings)
+
+    def _quit_from_tray(self):
+        self.root.after(0, self._quit_app)
+
+    def _quit_app(self):
+        self._is_quitting = True
+        self._on_close()
+
+    def _start_tray_icon(self):
+        self._tray_icon = WindowsTrayIcon(
+            tooltip="得意划词翻译",
+            icon_path=resource_path("image/app.ico"),
+            on_show=self._show_main_window,
+            on_toggle_enabled=self._toggle_enable_var_threadsafe,
+            is_enabled=lambda: bool(self.enable_var.get()),
+            get_source=lambda: self.translate_source_var.get(),
+            set_source=self._set_translate_source,
+            on_settings=self._open_settings_from_tray,
+            on_quit=self._quit_from_tray,
+        )
+        if not self._tray_icon.start():
+            self._tray_icon = None
+
+    def _toggle_enable_var_threadsafe(self):
+        self.root.after(0, self._toggle_enable_var)
 
     def run(self):
         self.floating = FloatingWindow(self.root, VOCAB_PATH)
@@ -1186,6 +1245,7 @@ class UnifiedApp:
 
         self.hotkey_listener.start(on_register_fail=_on_hotkey_fail)
         self.status_var.set(f"已开启 — 划词后按 {self.hotkey_var.get()} 即可翻译")
+        self._start_tray_icon()
         self.root.after(150, self._ensure_api_settings)
         self.root.after(1200, self._check_for_updates_async)
         self.root.mainloop()
