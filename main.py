@@ -78,6 +78,7 @@ class UnifiedApp:
         self.vocab_rows = []
         self.vocab_filter_buttons = {}
         self._history_items = []
+        self._history_context_item = None
         
         # 悬浮窗和快捷键
         self.floating = None
@@ -122,6 +123,7 @@ class UnifiedApp:
     def _clear_log(self):
         self._clear_history_view()
         self._history_items = []
+        self.history_search_var.set("")
         
         import history_store
         history_store.save([])
@@ -555,6 +557,7 @@ class UnifiedApp:
         )
         search_entry.pack(side="left", fill="x", expand=True)
         search_entry.bind("<KeyRelease>", lambda _e: self._filter_history())
+        search_entry.bind("<Escape>", lambda _e: self._clear_history_search())
         tk.Button(
             search_row, text="清除", command=self._clear_history_search,
             bg=UI_BG, fg=UI_TEXT_MUTED, activebackground=UI_CHIP, activeforeground=UI_ACCENT,
@@ -570,6 +573,7 @@ class UnifiedApp:
             padx=16, pady=16, highlightthickness=0, spacing1=3, spacing3=7
         )
         self.history_text.pack(fill="both", expand=True)
+        self.history_text.bind("<Button-3>", self._show_history_context_menu)
         self.history_text.tag_configure(
             "card_start",
             spacing1=10,
@@ -625,6 +629,7 @@ class UnifiedApp:
             lmargin2=10,
             rmargin=10,
         )
+        self._build_history_context_menu()
 
         # 状态提示
         status = tk.Frame(self.history_frame, bg=UI_STATUS_BG, padx=12, pady=10, highlightthickness=0)
@@ -674,10 +679,89 @@ class UnifiedApp:
         self.history_search_var.set("")
         self._render_history(self._history_items)
 
+    def _build_history_context_menu(self):
+        self.history_menu = tk.Menu(self.root, tearoff=0)
+        self.history_menu.add_command(label="复制原文", command=self._copy_history_original)
+        self.history_menu.add_command(label="复制译文", command=self._copy_history_translated)
+        self.history_menu.add_command(label="复制整条", command=self._copy_history_entry)
+        self.history_menu.add_separator()
+        self.history_menu.add_command(label="删除此条", command=self._delete_history_entry)
+
+    def _show_history_context_menu(self, event):
+        item = self._history_item_at(event.x, event.y)
+        if not item:
+            return
+        self._history_context_item = item
+        try:
+            self.history_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.history_menu.grab_release()
+
+    def _history_item_at(self, x, y):
+        tags = self.history_text.tag_names(f"@{x},{y}")
+        for tag in tags:
+            if tag.startswith("hist_"):
+                return getattr(self, "_history_tag_items", {}).get(tag)
+        return None
+
+    def _current_history_entry(self):
+        item = self._history_context_item
+        if item in self._history_items:
+            return item
+        return None
+
+    def _copy_history_original(self):
+        item = self._current_history_entry()
+        if not item:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(str(item.get("original", "")))
+        self.status_var.set("已复制原文")
+
+    def _copy_history_translated(self):
+        item = self._current_history_entry()
+        if not item:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(str(item.get("translated", "")))
+        self.status_var.set("已复制译文")
+
+    def _copy_history_entry(self):
+        item = self._current_history_entry()
+        if not item:
+            return
+        ts = str(item.get("timestamp", ""))
+        original = str(item.get("original", ""))
+        translated = str(item.get("translated", ""))
+        self.root.clipboard_clear()
+        self.root.clipboard_append(f"[{ts}] {original}\n{translated}")
+        self.status_var.set("已复制整条历史")
+
+    def _delete_history_entry(self):
+        item = self._current_history_entry()
+        if not item:
+            return
+        original = str(item.get("original", ""))
+        preview = self._list_preview(original, max_chars=80)
+        if not messagebox.askyesno("删除历史", f"确认删除这条记录？\n\n{preview}", parent=self.root):
+            return
+        try:
+            self._history_items.remove(item)
+        except ValueError:
+            return
+        import history_store
+        history_store.save(self._history_items)
+        if self.history_search_var.get().strip():
+            self._filter_history()
+        else:
+            self._render_history(self._history_items)
+        self.status_var.set("已删除历史记录")
+
     def _clear_history_view(self):
         self.history_text.configure(state="normal")
         self.history_text.delete("1.0", "end")
         self.history_text.configure(state="disabled")
+        self._history_tag_items = {}
 
     @staticmethod
     def _split_translation_sections(text):
@@ -701,16 +785,18 @@ class UnifiedApp:
         original = str(item.get("original", ""))
         translated = str(item.get("translated", ""))
         main_trans, note = self._split_translation_sections(translated)
+        hist_tag = f"hist_{id(item)}"
+        self._history_tag_items[hist_tag] = item
 
         segments = [
-            (f"{ts}  ", ("time", "card_start")),
-            (f"{original}\n", ("orig", "card_start")),
-            ("译文\n", ("section",)),
-            (f"{main_trans or translated}\n", ("trans",)),
+            (f"{ts}  ", ("time", "card_start", hist_tag)),
+            (f"{original}\n", ("orig", "card_start", hist_tag)),
+            ("译文\n", ("section", hist_tag)),
+            (f"{main_trans or translated}\n", ("trans", hist_tag)),
         ]
         if note:
-            segments.append((f"{note}\n", ("note",)))
-        segments.append(("\n", ("divider",)))
+            segments.append((f"{note}\n", ("note", hist_tag)))
+        segments.append(("\n", ("divider", hist_tag)))
 
         if index == "1.0":
             for text, tags in reversed(segments):
