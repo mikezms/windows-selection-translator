@@ -457,6 +457,7 @@ class ApiSettingsDialog:
             form_cfg["ai_provider"],
             form_cfg["ai_base_url"],
             form_cfg["ai_model"],
+            form_cfg["ai_api_key"],
         )
         self._set_saved_models(wrapped.get("ai_models"))
         cfg["ai_models"] = self.saved_models

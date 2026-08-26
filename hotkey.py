@@ -1,5 +1,6 @@
 """Windows 全局热键监听 + 模拟 Ctrl+C 取选中文本。"""
 import ctypes
+import re
 import threading
 import time
 from ctypes import wintypes
@@ -23,19 +24,25 @@ HOTKEY_ID = 1
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
 
-KEY_RELEASE_WAIT_SEC = 0.35
+KEY_RELEASE_WAIT_SEC = 1.2
+KEY_RELEASE_POLL_SEC = 0.01
+KEYBOARD_SETTLE_SEC = 0.05
+KEY_EVENT_INTERVAL_SEC = 0.012
 COPY_RETRY_INTERVAL_SEC = 0.03
-COPY_TIMEOUT_SEC = 0.45
+COPY_ATTEMPT_DELAY_SEC = 0.08
+COPY_TIMEOUT_SEC = 0.7
+
+_copy_lock = threading.Lock()
 
 _user32 = ctypes.windll.user32
 _kernel32 = ctypes.windll.kernel32
 
 
 def clean_text(raw: str) -> str:
-    text = (raw or "").strip().replace("\r", " ").replace("\n", " ")
-    while "  " in text:
-        text = text.replace("  ", " ")
-    return text
+    text = str(raw or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    paragraphs = re.split(r"\n\s*\n+", text)
+    cleaned = [re.sub(r"[ \t\n]+", " ", paragraph).strip() for paragraph in paragraphs]
+    return "\n\n".join(paragraph for paragraph in cleaned if paragraph)
 
 
 def get_cursor_pos() -> tuple[int, int]:
@@ -94,25 +101,39 @@ def parse_hotkey(value: str) -> tuple[int, int]:
     return mods or MOD_ALT, key
 
 
-def _wait_hotkey_released() -> None:
+def _hotkey_keys(value: str) -> tuple[int, ...]:
+    mods, key = parse_hotkey(value)
+    keys = [key]
+    if mods & MOD_ALT:
+        keys.append(VK_MENU)
+    if mods & MOD_CONTROL:
+        keys.append(VK_CONTROL)
+    if mods & MOD_SHIFT:
+        keys.append(VK_SHIFT)
+    if mods & MOD_WIN:
+        keys.extend((VK_LWIN, VK_RWIN))
+    return tuple(keys)
+
+
+def _wait_hotkey_released(value: str) -> bool:
     deadline = time.time() + KEY_RELEASE_WAIT_SEC
+    keys = _hotkey_keys(value)
     while time.time() < deadline:
-        if (
-            not _is_key_down(VK_MENU)
-            and not _is_key_down(VK_CONTROL)
-            and not _is_key_down(VK_SHIFT)
-            and not _is_key_down(VK_LWIN)
-            and not _is_key_down(VK_RWIN)
-        ):
-            return
-        time.sleep(0.01)
+        if not any(_is_key_down(key) for key in keys):
+            time.sleep(KEYBOARD_SETTLE_SEC)
+            return True
+        time.sleep(KEY_RELEASE_POLL_SEC)
+    return False
 
 
 def _send_copy_shortcut(use_insert: bool = False) -> None:
     copy_key = VK_INSERT if use_insert else VK_C
     _user32.keybd_event(VK_CONTROL, 0, 0, 0)
+    time.sleep(KEY_EVENT_INTERVAL_SEC)
     _user32.keybd_event(copy_key, 0, 0, 0)
+    time.sleep(KEY_EVENT_INTERVAL_SEC)
     _user32.keybd_event(copy_key, 0, 2, 0)
+    time.sleep(KEY_EVENT_INTERVAL_SEC)
     _user32.keybd_event(VK_CONTROL, 0, 2, 0)
 
 
@@ -123,46 +144,40 @@ def _clipboard_text() -> str:
         return ""
 
 
-def _set_clipboard_text(text: str) -> bool:
-    for _ in range(3):
-        try:
-            pyperclip.copy(text)
-            return True
-        except Exception:
-            time.sleep(0.02)
-    return False
+def _clipboard_sequence_number() -> int:
+    return int(_user32.GetClipboardSequenceNumber())
 
 
-def _wait_for_clipboard_text(sentinel: str) -> str:
+def _wait_for_clipboard_change(sequence: int) -> str:
     deadline = time.time() + COPY_TIMEOUT_SEC
     while time.time() < deadline:
-        copied = _clipboard_text()
-        if copied != sentinel:
-            return copied
+        current_sequence = _clipboard_sequence_number()
+        if current_sequence != sequence:
+            copied = _clipboard_text()
+            if copied:
+                return copied
         time.sleep(COPY_RETRY_INTERVAL_SEC)
     return ""
 
 
-def copy_selected_text() -> str:
+def _copy_selection_once(use_insert: bool = False) -> str:
+    sequence = _clipboard_sequence_number()
+    _send_copy_shortcut(use_insert=use_insert)
+    return _wait_for_clipboard_change(sequence)
+
+
+def copy_selected_text(hotkey: str = "alt+t") -> str:
     """模拟复制选中文本；复制失败时返回空，避免误用旧剪贴板内容。"""
-    _wait_hotkey_released()
-
-    before = _clipboard_text()
-    sentinel = f"__SNAPTRANSLATE_COPY_SENTINEL_{time.time_ns()}__"
-    if not _set_clipboard_text(sentinel):
+    with _copy_lock:
+        if not _wait_hotkey_released(hotkey):
+            return ""
+        for attempt, use_insert in enumerate((False, False, True)):
+            if attempt:
+                time.sleep(COPY_ATTEMPT_DELAY_SEC)
+            copied = _copy_selection_once(use_insert=use_insert)
+            if copied:
+                return clean_text(copied)
         return ""
-
-    _send_copy_shortcut(use_insert=False)
-    copied = _wait_for_clipboard_text(sentinel)
-
-    if not copied:
-        _send_copy_shortcut(use_insert=True)
-        copied = _wait_for_clipboard_text(sentinel)
-
-    if not copied:
-        _set_clipboard_text(before)
-        return ""
-    return clean_text(copied)
 
 
 class HotkeyListener:

@@ -2,8 +2,9 @@
 import re
 import threading
 import tkinter as tk
-from tkinter import font as tkfont, scrolledtext
+from tkinter import font as tkfont
 
+from bilingual_layout import BilingualPair, build_bilingual_pairs
 import deepseek
 import tts
 import vocab_store
@@ -285,6 +286,7 @@ class FloatingWindow:
     def _render_article(self, original: str, translated: str) -> None:
         self._original = original
         self._translated = translated
+        pairs = build_bilingual_pairs(original, translated)
 
         if self.win is not None:
             self.win.destroy()
@@ -295,6 +297,7 @@ class FloatingWindow:
         top.title("文章翻译")
         top.configure(bg=UI_FLOAT_BG)
         top.resizable(True, True)
+        top.minsize(680, 560)
         top.transient(self.root)
 
         def _close() -> None:
@@ -307,29 +310,38 @@ class FloatingWindow:
 
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
-        width = min(1220, max(980, int(screen_w * 0.82)))
-        height = min(840, max(700, int(screen_h * 0.8)))
+        width = min(1080, max(720, int(screen_w * 0.78)))
+        height = min(860, max(620, int(screen_h * 0.82)))
         x = max(20, (screen_w - width) // 2)
         y = max(20, (screen_h - height) // 2)
         top.geometry(f"{width}x{height}+{x}+{y}")
 
-        outer = tk.Frame(top, bg=UI_FLOAT_BG, padx=18, pady=16)
+        outer = tk.Frame(top, bg=UI_FLOAT_BG, padx=28, pady=22)
         outer.pack(fill="both", expand=True)
 
         header = tk.Frame(outer, bg=UI_FLOAT_BG)
-        header.pack(fill="x", pady=(0, 12))
+        header.pack(fill="x", pady=(0, 16))
+        title_row = tk.Frame(header, bg=UI_FLOAT_BG)
+        title_row.pack(fill="x")
         tk.Label(
-            header, text="文章翻译", bg=UI_FLOAT_BG, fg=UI_FLOAT_FG,
+            title_row, text="文章对照翻译", bg=UI_FLOAT_BG, fg=UI_FLOAT_FG,
             font=tkfont.Font(family=FONT_FAMILY, size=18, weight="bold"),
-        ).pack(anchor="w")
+        ).pack(side="left")
+        tk.Button(
+            title_row, text="✕", command=_close,
+            relief="flat", bd=0, padx=10, pady=2,
+            bg=UI_FLOAT_BG, fg=UI_FLOAT_MUTED,
+            activebackground="#f1f5f9", activeforeground=UI_FLOAT_FG,
+            font=tkfont.Font(family=FONT_FAMILY, size=12), cursor="hand2",
+        ).pack(side="right")
         tk.Label(
-            header, text="自动切换到文章模式。可滚动阅读，也可复制原文或译文。", bg=UI_FLOAT_BG, fg=UI_FLOAT_MUTED,
+            header, text=f"全文翻译结果 · {len(pairs)} 组中英对照", bg=UI_FLOAT_BG, fg=UI_FLOAT_MUTED,
             font=tkfont.Font(family=FONT_FAMILY, size=9),
         ).pack(anchor="w", pady=(3, 0))
 
         status_var = tk.StringVar(value="")
         action_row = tk.Frame(header, bg=UI_FLOAT_BG)
-        action_row.pack(fill="x", pady=(8, 0))
+        action_row.pack(fill="x", pady=(12, 0))
 
         def _copy(text: str, label: str) -> None:
             self.root.clipboard_clear()
@@ -350,52 +362,91 @@ class FloatingWindow:
             activebackground=UI_FLOAT_BTN_H, activeforeground="#ffffff",
             font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"), cursor="hand2",
         ).pack(side="left", padx=(8, 0))
-        tk.Button(
-            action_row, text="关闭", command=top.destroy,
-            relief="flat", bd=0, padx=12, pady=6,
-            bg=UI_FLOAT_BG_SOFT, fg=UI_FLOAT_MUTED,
-            activebackground=UI_FLOAT_BG_SOFT, activeforeground="#ffffff",
-            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"), cursor="hand2",
-        ).pack(side="right")
 
         tk.Label(
-            header, textvariable=status_var, bg=UI_FLOAT_BG, fg=UI_FLOAT_ACCENT,
+            action_row, textvariable=status_var, bg=UI_FLOAT_BG, fg=UI_FLOAT_ACCENT,
             font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
-        ).pack(anchor="w", pady=(8, 0))
+        ).pack(side="left", padx=(12, 0))
 
-        split = tk.PanedWindow(outer, orient="horizontal", sashwidth=8, sashrelief="flat", bg=UI_FLOAT_BG, bd=0)
-        split.pack(fill="both", expand=True)
-
-        left = tk.Frame(split, bg=UI_FLOAT_BG)
-        right = tk.Frame(split, bg=UI_FLOAT_BG)
-        split.add(left, minsize=360)
-        split.add(right, minsize=360)
-
-        self._build_article_panel(left, "原文", original, UI_FLOAT_FG)
-        self._build_article_panel(right, "译文", translated, UI_FLOAT_ACCENT)
+        self._build_bilingual_reader(outer, top, pairs)
 
         self.win = top
         top.lift()
         top.focus_force()
 
-    def _build_article_panel(self, parent: tk.Widget, title: str, text: str, title_color: str) -> None:
-        parent.pack_propagate(False)
-        parent.configure(bg=UI_FLOAT_BG)
-        title_row = tk.Frame(parent, bg=UI_FLOAT_BG)
-        title_row.pack(fill="x", pady=(0, 8))
-        tk.Label(
-            title_row, text=title, bg=UI_FLOAT_BG, fg=title_color,
-            font=tkfont.Font(family=FONT_FAMILY, size=11, weight="bold"),
-        ).pack(anchor="w")
+    def _build_bilingual_reader(
+        self,
+        parent: tk.Widget,
+        top: tk.Toplevel,
+        pairs: list[BilingualPair],
+    ) -> None:
+        shell = tk.Frame(parent, bg="#f8fafc", highlightbackground="#e2e8f0", highlightthickness=1)
+        shell.pack(fill="both", expand=True)
 
-        box = scrolledtext.ScrolledText(
-            parent, wrap="word", bg="#ffffff", fg=UI_FLOAT_FG,
-            insertbackground=UI_FLOAT_FG, relief="solid", bd=1, highlightthickness=0,
-            font=tkfont.Font(family=FONT_FAMILY, size=10),
-        )
-        box.pack(fill="both", expand=True)
-        box.insert("1.0", text)
-        box.configure(state="disabled")
+        canvas = tk.Canvas(shell, bg="#f8fafc", highlightthickness=0, bd=0)
+        scrollbar = tk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        content = tk.Frame(canvas, bg="#f8fafc")
+        content_window = canvas.create_window((0, 0), window=content, anchor="nw")
+        wrapping_labels: list[tk.Label] = []
+
+        for index, pair in enumerate(pairs, start=1):
+            block_bg = "#ffffff" if index % 2 else "#f8fafc"
+            block = tk.Frame(content, bg=block_bg, padx=26, pady=20)
+            block.pack(fill="x")
+
+            meta = tk.Frame(block, bg=block_bg)
+            meta.pack(fill="x", pady=(0, 10))
+            tk.Label(
+                meta, text=f"{index:02d}", bg=block_bg, fg=UI_FLOAT_ACCENT,
+                font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+            ).pack(side="left")
+            tk.Label(
+                meta, text=pair.unit, bg=block_bg, fg=UI_FLOAT_MUTED,
+                font=tkfont.Font(family=FONT_FAMILY, size=9),
+            ).pack(side="left", padx=(8, 0))
+
+            original_label = tk.Label(
+                block, text=pair.original, justify="left", anchor="w",
+                bg=block_bg, fg=UI_FLOAT_FG,
+                font=tkfont.Font(family=FONT_FAMILY, size=11),
+            )
+            original_label.pack(fill="x")
+
+            translated_row = tk.Frame(block, bg=block_bg)
+            translated_row.pack(fill="x", pady=(12, 0))
+            tk.Frame(translated_row, bg="#10b981", width=3).pack(side="left", fill="y", padx=(0, 12))
+            translated_label = tk.Label(
+                translated_row, text=pair.translated, justify="left", anchor="w",
+                bg=block_bg, fg="#047857",
+                font=tkfont.Font(family=FONT_FAMILY, size=11, weight="bold"),
+            )
+            translated_label.pack(side="left", fill="x", expand=True)
+            wrapping_labels.extend((original_label, translated_label))
+
+            if index < len(pairs):
+                tk.Frame(content, bg="#e2e8f0", height=1).pack(fill="x")
+
+        def _sync_scroll_region(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _resize_content(event) -> None:
+            canvas.itemconfigure(content_window, width=event.width)
+            wraplength = max(300, event.width - 92)
+            for label in wrapping_labels:
+                label.configure(wraplength=wraplength)
+
+        def _scroll(event) -> str:
+            if event.delta:
+                canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+            return "break"
+
+        content.bind("<Configure>", _sync_scroll_region)
+        canvas.bind("<Configure>", _resize_content)
+        top.bind("<MouseWheel>", _scroll)
 
     def _bind_drag(self, top: tk.Toplevel) -> None:
         def _start(e):

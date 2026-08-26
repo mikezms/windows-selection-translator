@@ -79,11 +79,15 @@ def _normalize_model_history_item(item) -> dict[str, str] | None:
         provider = str(item.get("provider") or "custom").strip() or "custom"
         base_url = str(item.get("base_url") or "").strip()
         model = str(item.get("model") or "").strip()
+        api_key = str(item.get("api_key") or "").strip()
         if not model:
             return None
         if provider_kind(provider) == "openai_compatible":
             base_url = normalize_openai_base_url(base_url, provider)
-        return {"provider": provider, "base_url": base_url, "model": model}
+        out = {"provider": provider, "base_url": base_url, "model": model}
+        if api_key:
+            out["api_key"] = api_key
+        return out
 
     text = str(item).strip()
     if not text:
@@ -239,13 +243,14 @@ def normalize_hotkey(value: str) -> str:
     return "+".join(unique)
 
 
-def append_model_history(config: dict, provider: str, base_url: str, model: str) -> dict:
+def append_model_history(config: dict, provider: str, base_url: str, model: str, api_key: str = "") -> dict:
     data = dict(config or {})
     models = _normalize_model_history_list(data.get("ai_models"))
     item = _normalize_model_history_item({
         "provider": provider,
         "base_url": base_url,
         "model": model,
+        "api_key": api_key,
     })
     if not item:
         return data

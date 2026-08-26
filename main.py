@@ -4,7 +4,10 @@ import threading
 import time
 import random
 import tkinter as tk
+from pathlib import Path
 from tkinter import font as tkfont, scrolledtext, messagebox, ttk
+
+from PIL import Image, ImageTk
 
 import hotkey as hk
 import app_config
@@ -74,9 +77,16 @@ class UnifiedApp:
         self.sort_mode_var = tk.StringVar(value="最新添加")
         self.vocab_filter_var = tk.StringVar(value="全部")
         self.history_search_var = tk.StringVar(value="")
+        self.history_filter_var = tk.StringVar(value="全部")
+        self.control_summary_var = tk.StringVar(value="")
         self._selected_vocab_index = 0
         self.vocab_rows = []
         self.vocab_filter_buttons = {}
+        self.history_filter_buttons = {}
+        self.source_buttons = {}
+        self._provider_icons = {}
+        self._tooltip_win = None
+        self._tooltip_after = None
         self._history_items = []
         self._history_context_item = None
         
@@ -93,6 +103,7 @@ class UnifiedApp:
 
         self._build_ui()
         self._refresh_saved_model_switch_menu()
+        self._update_control_summary()
         self._load_vocab_list()
 
     # ---- 翻译业务逻辑 ----
@@ -103,6 +114,7 @@ class UnifiedApp:
     def _on_enable_toggle(self):
         with self._enabled_lock:
             self._translate_enabled = bool(self.enable_var.get())
+        self._update_control_summary()
         if self._translate_enabled:
             self.status_var.set(f"已开启 — 划词后按 {self.hotkey_var.get()} 即可翻译")
         else:
@@ -112,7 +124,10 @@ class UnifiedApp:
         ts = time.strftime("%H:%M:%S")
         item = {"timestamp": ts, "original": original, "translated": result}
         self._history_items.insert(0, item)
-        self._insert_history_item(item, at_top=True)
+        if self.history_search_var.get().strip() or self.history_filter_var.get() != "全部":
+            self._filter_history()
+        else:
+            self._insert_history_item(item, at_top=True)
         
         # 存入文件
         import history_store
@@ -121,6 +136,8 @@ class UnifiedApp:
         history_store.save(hist_items)
 
     def _clear_log(self):
+        if not messagebox.askyesno("清空历史", "确认清空所有翻译历史？", parent=self.root):
+            return
         self._clear_history_view()
         self._history_items = []
         self.history_search_var.set("")
@@ -131,7 +148,7 @@ class UnifiedApp:
 
     def _do_translate_job(self):
         if not self._is_translate_enabled(): return
-        text = hk.copy_selected_text()
+        text = hk.copy_selected_text(self.hotkey_var.get())
         if not text:
             self.root.after(0, lambda: self._show_error("提示", f"未检测到选中文本，请先划词再按 {self.hotkey_var.get()}"))
             return
@@ -242,22 +259,41 @@ class UnifiedApp:
         settings = tk.Frame(self.sidebar, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER, padx=12, pady=16)
         settings.pack(side="bottom", fill="x", padx=12, pady=24)
 
+        summary = tk.Frame(settings, bg=UI_CHIP, padx=10, pady=8)
+        summary.pack(fill="x", pady=(0, 12))
+        tk.Label(
+            summary, textvariable=self.control_summary_var,
+            bg=UI_CHIP, fg=UI_ACCENT, justify="left", anchor="w",
+            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+            wraplength=150,
+        ).pack(fill="x")
+
         tk.Label(settings, text="快捷开关", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 10))
         
         chk_kw = dict(bg=UI_CARD, fg=UI_TEXT_SOFT, activebackground=UI_CARD, activeforeground=UI_TEXT,
                       selectcolor=UI_CHIP, font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
         
         tk.Checkbutton(settings, text="启用快捷键翻译", variable=self.enable_var, command=self._on_enable_toggle, **chk_kw).pack(anchor="w", pady=2)
-        tk.Checkbutton(settings, text="翻译后弹出悬浮窗", variable=self.floating_var, **chk_kw).pack(anchor="w", pady=2)
+        tk.Checkbutton(settings, text="翻译后弹出悬浮窗", variable=self.floating_var, command=self._update_control_summary, **chk_kw).pack(anchor="w", pady=2)
 
         tk.Frame(settings, bg=UI_BORDER_SOFT, height=1).pack(fill="x", pady=10)
         tk.Label(settings, text="翻译方式", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w", pady=(0, 6))
-        
-        rb_kw = dict(bg=UI_CARD, activebackground=UI_CARD, fg=UI_TEXT_SOFT, selectcolor=UI_CHIP,
-                     font=tkfont.Font(family=FONT_FAMILY, size=9), highlightthickness=0, bd=0)
-        tk.Radiobutton(settings, text="通用快速翻译", variable=self.translate_source_var, value="mymemory", command=self._on_translate_source_change, **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="Google 翻译", variable=self.translate_source_var, value="google", command=self._on_translate_source_change, **rb_kw).pack(anchor="w")
-        tk.Radiobutton(settings, text="AI 技术语境翻译", variable=self.translate_source_var, value="deepseek", command=self._on_translate_source_change, **rb_kw).pack(anchor="w")
+
+        source_row = tk.Frame(settings, bg=UI_CARD)
+        source_row.pack(fill="x")
+        self.source_buttons = {}
+        for label, value in (("快速", "mymemory"), ("Google", "google"), ("AI", "deepseek")):
+            btn = tk.Button(
+                source_row, text=label,
+                command=lambda v=value: self._set_translate_source_from_ui(v),
+                relief="flat", bd=0, padx=0, pady=6,
+                font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+                cursor="hand2",
+            )
+            btn.pack(side="left", fill="x", expand=True, padx=(0, 4 if value != "deepseek" else 0))
+            self._bind_source_tooltip(btn, value)
+            self.source_buttons[value] = btn
+        self._refresh_source_buttons()
 
         tk.Button(
             settings, text="API 设置", command=self._open_api_settings,
@@ -269,23 +305,20 @@ class UnifiedApp:
 
         model_row = tk.Frame(settings, bg=UI_CARD)
         model_row.pack(fill="x", pady=(10, 0))
-        tk.Label(model_row, text="历史模型", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
+        tk.Label(model_row, text="当前 AI 模型", bg=UI_CARD, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold")).pack(anchor="w")
+        model_switch_row = tk.Frame(model_row, bg=UI_CARD)
+        model_switch_row.pack(fill="x", pady=(4, 0))
+        self.saved_model_icon_label = tk.Label(model_switch_row, bg=UI_CARD, width=24)
+        self.saved_model_icon_label.pack(side="left", padx=(0, 6))
         self.saved_model_switch_var = tk.StringVar(value="")
-        self.saved_model_switch_menu = tk.OptionMenu(model_row, self.saved_model_switch_var, "")
+        self.saved_model_switch_menu = tk.OptionMenu(model_switch_row, self.saved_model_switch_var, "")
         self.saved_model_switch_menu.configure(
             bg=UI_CHIP, fg=UI_ACCENT, activebackground=UI_ACCENT,
             activeforeground="#ffffff", relief="flat", bd=0,
             font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
-            width=18,
+            width=15,
         )
-        self.saved_model_switch_menu.pack(fill="x", pady=(4, 0))
-        tk.Button(
-            model_row, text="切换模型", command=self._switch_saved_model,
-            bg=UI_CARD, fg=UI_ACCENT, activebackground=UI_CHIP,
-            activeforeground=UI_ACCENT, relief="flat", bd=0,
-            font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
-            cursor="hand2", pady=4,
-        ).pack(fill="x", pady=(6, 0))
+        self.saved_model_switch_menu.pack(side="left", fill="x", expand=True)
 
         hotkey_row = tk.Frame(settings, bg=UI_CARD)
         hotkey_row.pack(fill="x", pady=(10, 0))
@@ -304,10 +337,98 @@ class UnifiedApp:
             cursor="hand2", pady=4,
         ).pack(fill="x", pady=(6, 0))
 
+    @staticmethod
+    def _source_label(source):
+        return {
+            "mymemory": "快速",
+            "google": "Google",
+            "deepseek": "AI",
+        }.get(source, "翻译")
+
+    def _update_control_summary(self):
+        enabled = "已启用" if bool(self.enable_var.get()) else "已暂停"
+        floating = "悬浮窗开" if bool(self.floating_var.get()) else "悬浮窗关"
+        source = self._source_label(self.translate_source_var.get())
+        self.control_summary_var.set(f"{enabled} · {self.hotkey_var.get()}\n{source} · {floating}")
+
+    def _refresh_source_buttons(self):
+        current = self.translate_source_var.get()
+        for source, btn in getattr(self, "source_buttons", {}).items():
+            active = source == current
+            bg = UI_ACCENT if active else UI_CHIP
+            fg = "#ffffff" if active else UI_ACCENT
+            btn.configure(
+                bg=bg, fg=fg,
+                activebackground=UI_ACCENT,
+                activeforeground="#ffffff",
+            )
+
+    def _set_translate_source_from_ui(self, source):
+        self.translate_source_var.set(source)
+        self._on_translate_source_change()
+
+    def _bind_source_tooltip(self, widget, source):
+        tips = {
+            "mymemory": "免配置，适合日常短句和查词；速度快，质量稳定但有免费额度限制。",
+            "google": "使用 Google 公开接口，译文通常更自然；网络不通时可能超时。",
+            "deepseek": "使用当前 AI 模型，适合 AI/技术语境、术语解释和长段落精翻。",
+        }
+        text = tips.get(source, "")
+        widget.bind("<Enter>", lambda event, t=text: self._schedule_tooltip(event.widget, t))
+        widget.bind("<Leave>", lambda _event: self._hide_tooltip())
+
+    def _schedule_tooltip(self, widget, text):
+        self._hide_tooltip()
+        if not text:
+            return
+        self._tooltip_after = self.root.after(350, lambda: self._show_tooltip(widget, text))
+
+    def _show_tooltip(self, widget, text):
+        self._hide_tooltip(cancel_after=False)
+        if not widget.winfo_exists():
+            return
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        top.configure(bg=UI_TEXT, highlightthickness=0)
+        label = tk.Label(
+            top,
+            text=text,
+            bg=UI_TEXT,
+            fg="#ffffff",
+            justify="left",
+            anchor="w",
+            wraplength=220,
+            padx=10,
+            pady=7,
+            font=tkfont.Font(family=FONT_FAMILY, size=8),
+        )
+        label.pack()
+        x = widget.winfo_rootx()
+        y = widget.winfo_rooty() + widget.winfo_height() + 8
+        top.geometry(f"+{x}+{y}")
+        self._tooltip_win = top
+
+    def _hide_tooltip(self, cancel_after=True):
+        if cancel_after and self._tooltip_after is not None:
+            try:
+                self.root.after_cancel(self._tooltip_after)
+            except Exception:
+                pass
+            self._tooltip_after = None
+        if self._tooltip_win is not None:
+            try:
+                self._tooltip_win.destroy()
+            except Exception:
+                pass
+            self._tooltip_win = None
+
     def _on_translate_source_change(self):
         self.app_config = app_config.load_config()
         self.app_config["translate_source"] = self.translate_source_var.get()
         app_config.save_config(self.app_config)
+        self._refresh_source_buttons()
+        self._update_control_summary()
 
     def _open_api_settings(self):
         dialog = ApiSettingsDialog(self.root, first_run=False)
@@ -318,43 +439,126 @@ class UnifiedApp:
             self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
             self._apply_hotkey_setting()
             self.status_var.set(f"已保存 API 设置：{app_config.provider_label(self.app_config.get('ai_provider', 'deepseek'))}")
+            self._update_control_summary()
+
+    def _provider_icon(self, provider, size=20):
+        key = (str(provider or "custom"), size)
+        if key in self._provider_icons:
+            return self._provider_icons[key]
+
+        filename = app_config.provider_preset(key[0]).get("icon") or "openrouter.png"
+        path = Path(resource_path(f"image/providers/{filename}"))
+        icon = None
+        if path.exists():
+            try:
+                with Image.open(path) as img:
+                    img = img.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+                    icon = ImageTk.PhotoImage(img)
+            except Exception:
+                icon = None
+        self._provider_icons[key] = icon
+        return icon
+
+    def _set_saved_model_icon(self, provider):
+        label = getattr(self, "saved_model_icon_label", None)
+        if label is None:
+            return
+        icon = self._provider_icon(provider, size=20)
+        if icon:
+            label.configure(image=icon, text="")
+            label.image = icon
+        else:
+            label.configure(image="", text="")
+            label.image = None
 
     def _saved_model_label(self, item):
-        provider = str(item.get("provider") or "custom")
-        base_url = str(item.get("base_url") or "").strip()
         model = str(item.get("model") or "").strip()
-        if not model:
-            return ""
-        label = model if not base_url else f"{model} @ {base_url}"
-        return f"{provider}: {label}" if provider != "custom" else label
+        return model
 
     def _refresh_saved_model_switch_menu(self):
         self.app_config = app_config.load_config()
+        current_item = {
+            "provider": self.app_config.get("ai_provider"),
+            "base_url": self.app_config.get("ai_base_url"),
+            "model": self.app_config.get("ai_model"),
+            "api_key": self.app_config.get("ai_api_key"),
+        }
         models = list(self.app_config.get("ai_models") or [])
-        labels = [self._saved_model_label(item) for item in models if self._saved_model_label(item)]
-        menu = self.saved_model_switch_menu["menu"]
-        menu.delete(0, "end")
-        if not labels:
-            labels = ["暂无历史模型"]
-        for label in labels:
-            menu.add_command(label=label, command=lambda v=label: self.saved_model_switch_var.set(v))
-        self.saved_model_switch_var.set(labels[0])
+        models = [item for item in models if self._saved_model_label(item)]
+        current_key = (
+            str(current_item.get("provider") or ""),
+            str(current_item.get("base_url") or ""),
+            str(current_item.get("model") or ""),
+        )
+        model_keys = {
+            (
+                str(item.get("provider") or ""),
+                str(item.get("base_url") or ""),
+                str(item.get("model") or ""),
+            )
+            for item in models
+        }
+        if self._saved_model_label(current_item) and current_key not in model_keys:
+            models.insert(0, current_item)
+        labels = [self._saved_model_label(item) for item in models] or ["暂无已保存模型"]
+        current_label = self._saved_model_label(current_item)
+        selected_label = current_label if current_label in labels else labels[0]
+        self._set_saved_model_icon(self.app_config.get("ai_provider"))
+
+        for menu_widget, var in (
+            (getattr(self, "saved_model_switch_menu", None), getattr(self, "saved_model_switch_var", None)),
+            (getattr(self, "header_model_switch_menu", None), getattr(self, "header_model_switch_var", None)),
+        ):
+            if menu_widget is None or var is None:
+                continue
+            menu = menu_widget["menu"]
+            menu.delete(0, "end")
+            if not models:
+                menu.add_command(label="暂无已保存模型", command=lambda: self._switch_saved_model_label("暂无已保存模型"))
+            for item in models:
+                provider = str(item.get("provider") or "custom")
+                icon = self._provider_icon(provider, size=16)
+                label = self._saved_model_label(item)
+                kwargs = {
+                    "label": label,
+                    "command": lambda it=dict(item): self._switch_saved_model_item(it),
+                }
+                if icon:
+                    kwargs["image"] = icon
+                    kwargs["compound"] = "left"
+                menu.add_command(**kwargs)
+            var.set(selected_label)
 
     def _switch_saved_model(self):
-        selected = self.saved_model_switch_var.get()
+        self._switch_saved_model_label(self.saved_model_switch_var.get())
+
+    def _switch_saved_model_label(self, selected):
+        if selected == "暂无已保存模型":
+            self.status_var.set("还没有保存过的模型配置")
+            return
         self.app_config = app_config.load_config()
         for item in list(self.app_config.get("ai_models") or []):
             if self._saved_model_label(item) == selected:
-                self.app_config["ai_provider"] = str(item.get("provider") or "custom")
-                self.app_config["ai_base_url"] = str(item.get("base_url") or "")
-                self.app_config["ai_model"] = str(item.get("model") or "")
-                app_config.save_config(self.app_config)
-                self.translate_source_var.set(self.app_config.get("translate_source", self.translate_source_var.get()))
-                self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
-                self._apply_hotkey_setting()
-                self.status_var.set(f"已切换模型：{self.app_config['ai_model']}")
+                self._switch_saved_model_item(item)
                 return
         self.status_var.set("没有可切换的历史模型")
+
+    def _switch_saved_model_item(self, item):
+        self.app_config = app_config.load_config()
+        self.app_config["ai_provider"] = str(item.get("provider") or "custom")
+        self.app_config["ai_base_url"] = str(item.get("base_url") or "")
+        self.app_config["ai_model"] = str(item.get("model") or "")
+        if str(item.get("api_key") or "").strip():
+            self.app_config["ai_api_key"] = str(item.get("api_key") or "").strip()
+        app_config.save_config(self.app_config)
+        deepseek.reset_client_cache()
+        self._refresh_saved_model_switch_menu()
+        self.translate_source_var.set(self.app_config.get("translate_source", self.translate_source_var.get()))
+        self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
+        self._apply_hotkey_setting()
+        self._update_control_summary()
+        self._set_saved_model_icon(self.app_config.get("ai_provider"))
+        self.status_var.set(f"已切换模型：{self.app_config['ai_model']}")
 
     def _ensure_api_settings(self):
         if not app_config.needs_first_run_setup():
@@ -366,6 +570,7 @@ class UnifiedApp:
             self._refresh_saved_model_switch_menu()
             self.hotkey_var.set(str(self.app_config.get("hotkey") or app_config.DEFAULT_HOTKEY))
             self._apply_hotkey_setting()
+            self._update_control_summary()
             self.status_var.set("API 设置已保存，可以开始使用")
             return
         messagebox.showwarning("需要 API Key", "请先完成 API 设置后再使用得意翻译。")
@@ -403,6 +608,7 @@ class UnifiedApp:
             self.hotkey_listener = hk.HotkeyListener(on_hotkey=self._do_translate_job, hotkey=hotkey)
             self.hotkey_listener.start(on_register_fail=lambda: self.root.after(0, lambda: self.status_var.set(f"错误：快捷键 {hotkey} 注册失败，可能被占用")))
             self.status_var.set(f"快捷键已更新为 {hotkey}")
+        self._update_control_summary()
 
     def _start_update_download(self, update):
         if self._update_progress_win and self._update_progress_win.winfo_exists():
@@ -536,9 +742,12 @@ class UnifiedApp:
         
         header = tk.Frame(self.history_frame, bg=UI_BG)
         header.pack(fill="x", pady=(0, 20))
-        tk.Label(header, text="最近翻译记录", bg=UI_BG, fg=UI_TEXT, font=tkfont.Font(family=FONT_FAMILY, size=16, weight="bold")).pack(side="left")
+        title_col = tk.Frame(header, bg=UI_BG)
+        title_col.pack(side="left", fill="x", expand=True)
+        tk.Label(title_col, text="翻译流", bg=UI_BG, fg=UI_TEXT, font=tkfont.Font(family=FONT_FAMILY, size=16, weight="bold")).pack(anchor="w")
+        tk.Label(title_col, textvariable=self.control_summary_var, bg=UI_BG, fg=UI_TEXT_MUTED, font=tkfont.Font(family=FONT_FAMILY, size=9)).pack(anchor="w", pady=(3, 0))
         
-        btn_clear = tk.Button(header, text="🗑 清空", command=self._clear_log,
+        btn_clear = tk.Button(header, text="清空历史", command=self._clear_log,
                               bg=UI_BG, fg=UI_TEXT_MUTED, activebackground=UI_CHIP, activeforeground=UI_DANGER,
                               relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=9), cursor="hand2")
         btn_clear.pack(side="right")
@@ -563,6 +772,21 @@ class UnifiedApp:
             bg=UI_BG, fg=UI_TEXT_MUTED, activebackground=UI_CHIP, activeforeground=UI_ACCENT,
             relief="flat", bd=0, font=tkfont.Font(family=FONT_FAMILY, size=9), cursor="hand2",
         ).pack(side="right", padx=(8, 0))
+
+        filter_row = tk.Frame(self.history_frame, bg=UI_BG)
+        filter_row.pack(fill="x", pady=(0, 12))
+        self.history_filter_buttons = {}
+        for kind in ("全部", "词/短语", "长文本", "AI"):
+            btn = tk.Button(
+                filter_row, text=kind,
+                command=lambda k=kind: self._set_history_filter(k),
+                relief="flat", bd=0, padx=14, pady=6,
+                font=tkfont.Font(family=FONT_FAMILY, size=9, weight="bold"),
+                cursor="hand2",
+            )
+            btn.pack(side="left", padx=(0, 8))
+            self.history_filter_buttons[kind] = btn
+        self._refresh_history_filter_buttons()
 
         card = tk.Frame(self.history_frame, bg=UI_CARD, highlightbackground=UI_BORDER, highlightthickness=1, padx=2, pady=2)
         card.pack(fill="both", expand=True)
@@ -590,7 +814,15 @@ class UnifiedApp:
         self.history_text.tag_configure(
             "orig",
             foreground=UI_TEXT,
-            font=tkfont.Font(family=FONT_FAMILY, size=11, weight="bold"),
+            font=tkfont.Font(family=FONT_FAMILY, size=10, weight="bold"),
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
+        self.history_text.tag_configure(
+            "orig_long",
+            foreground=UI_TEXT_SOFT,
+            font=tkfont.Font(family=FONT_FAMILY, size=10, weight="bold"),
             lmargin1=10,
             lmargin2=10,
             rmargin=10,
@@ -607,6 +839,14 @@ class UnifiedApp:
             "trans",
             foreground=UI_ACCENT,
             font=tkfont.Font(family=FONT_FAMILY, size=10),
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+        )
+        self.history_text.tag_configure(
+            "meta",
+            foreground=UI_TEXT_MUTED,
+            font=tkfont.Font(family=FONT_FAMILY, size=8),
             lmargin1=10,
             lmargin2=10,
             rmargin=10,
@@ -645,28 +885,36 @@ class UnifiedApp:
     def _render_history(self, items):
         self._clear_history_view()
         self.history_text.configure(state="normal")
-        for item in reversed(items or []):
-            self._write_history_item(item)
+        if not items:
+            self.history_text.insert("1.0", "还没有翻译记录。\n", ("section",))
+        else:
+            for item in reversed(items or []):
+                self._write_history_item(item)
         self.history_text.configure(state="disabled")
         self.history_text.yview_moveto(0)
 
     def _filter_history(self):
         query = self.history_search_var.get().strip().lower()
-        if not query:
-            self._render_history(self._history_items)
-            return
+        kind = self.history_filter_var.get()
 
         filtered = []
         for item in self._history_items:
             original = str(item.get("original", ""))
             translated = str(item.get("translated", ""))
             timestamp = str(item.get("timestamp", ""))
-            if query in original.lower() or query in translated.lower() or query in timestamp.lower():
+            text_matched = (
+                not query
+                or query in original.lower()
+                or query in translated.lower()
+                or query in timestamp.lower()
+            )
+            if text_matched and self._history_matches_filter(item, kind):
                 filtered.append(item)
 
         if filtered:
             self._render_history(filtered)
-            self.status_var.set(f"历史记录已筛选：{len(filtered)} 条")
+            if query or kind != "全部":
+                self.status_var.set(f"历史记录已筛选：{len(filtered)} 条")
             return
 
         self._clear_history_view()
@@ -677,13 +925,50 @@ class UnifiedApp:
 
     def _clear_history_search(self):
         self.history_search_var.set("")
-        self._render_history(self._history_items)
+        self._filter_history()
+
+    def _set_history_filter(self, kind):
+        self.history_filter_var.set(kind)
+        self._refresh_history_filter_buttons()
+        self._filter_history()
+
+    def _refresh_history_filter_buttons(self):
+        current = self.history_filter_var.get()
+        for kind, btn in getattr(self, "history_filter_buttons", {}).items():
+            active = kind == current
+            btn.configure(
+                bg=UI_ACCENT if active else UI_CHIP,
+                fg="#ffffff" if active else UI_ACCENT,
+                activebackground=UI_ACCENT,
+                activeforeground="#ffffff",
+            )
+
+    @staticmethod
+    def _is_long_history_text(text):
+        s = str(text or "").strip()
+        return len(s) >= 180 or s.count("\n") >= 2
+
+    @classmethod
+    def _history_kind(cls, item):
+        original = str(item.get("original", ""))
+        translated = str(item.get("translated", ""))
+        if "技术背景说明" in translated or "通俗解释" in translated:
+            return "AI"
+        if cls._is_long_history_text(original):
+            return "长文本"
+        return "词/短语"
+
+    def _history_matches_filter(self, item, kind):
+        if kind == "全部":
+            return True
+        return self._history_kind(item) == kind
 
     def _build_history_context_menu(self):
         self.history_menu = tk.Menu(self.root, tearoff=0)
         self.history_menu.add_command(label="复制原文", command=self._copy_history_original)
         self.history_menu.add_command(label="复制译文", command=self._copy_history_translated)
         self.history_menu.add_command(label="复制整条", command=self._copy_history_entry)
+        self.history_menu.add_command(label="收录到生词本", command=self._save_history_to_vocab)
         self.history_menu.add_separator()
         self.history_menu.add_command(label="删除此条", command=self._delete_history_entry)
 
@@ -757,6 +1042,26 @@ class UnifiedApp:
             self._render_history(self._history_items)
         self.status_var.set("已删除历史记录")
 
+    def _save_history_to_vocab(self):
+        item = self._current_history_entry()
+        if not item:
+            return
+        word = str(item.get("original", "")).strip()
+        meaning = str(item.get("translated", "")).strip()
+        if not word or not meaning:
+            self.status_var.set("这条历史没有可收录内容")
+            return
+        items = vocab_store.load(VOCAB_PATH)
+        if vocab_store.contains(items, word):
+            self.status_var.set("已在生词本中")
+            return
+        if not vocab_store.add(items, word, meaning):
+            self.status_var.set("收录失败")
+            return
+        vocab_store.save(items, VOCAB_PATH)
+        self.status_var.set("已收录到生词本")
+        self._load_vocab_list()
+
     def _clear_history_view(self):
         self.history_text.configure(state="normal")
         self.history_text.delete("1.0", "end")
@@ -785,14 +1090,18 @@ class UnifiedApp:
         original = str(item.get("original", ""))
         translated = str(item.get("translated", ""))
         main_trans, note = self._split_translation_sections(translated)
+        kind = self._history_kind(item)
+        original_view = self._list_preview(original, max_chars=220 if kind == "长文本" else 120)
+        translated_view = self._list_preview(main_trans or translated, max_chars=360 if kind == "长文本" else 260)
         hist_tag = f"hist_{id(item)}"
         self._history_tag_items[hist_tag] = item
 
         segments = [
             (f"{ts}  ", ("time", "card_start", hist_tag)),
-            (f"{original}\n", ("orig", "card_start", hist_tag)),
+            (f"{kind}\n", ("meta", hist_tag)),
+            (f"{original_view}\n", ("orig_long" if kind == "长文本" else "orig", "card_start", hist_tag)),
             ("译文\n", ("section", hist_tag)),
-            (f"{main_trans or translated}\n", ("trans", hist_tag)),
+            (f"{translated_view}\n", ("trans", hist_tag)),
         ]
         if note:
             segments.append((f"{note}\n", ("note", hist_tag)))
@@ -1270,6 +1579,7 @@ class UnifiedApp:
 
     # ---- 生命周期 ----
     def _on_close(self):
+        self._hide_tooltip()
         if not self._is_quitting and self._tray_icon:
             self.root.withdraw()
             self.status_var.set("已最小化到系统托盘")
